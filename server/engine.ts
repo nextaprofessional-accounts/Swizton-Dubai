@@ -31,12 +31,18 @@ export function billShare(e:Extract<Entry,{kind:'bill'}>,m:Masters){
  const r=ruleAt(m,e.hospital,e.date),hospital=m.hospitals.find(h=>h.id===e.hospital);
  if(!hospital)throw Error('Unknown hospital');
  if(hospital.method==='components'){
+  if(e.adminAmount!==undefined||e.refundableAmount!==undefined)throw Error('Recorded admin/refundable overrides apply only to net-share bills');
   const rates=r.components[e.regime];if(!rates)throw Error(`Missing ${e.regime} component rates`);
   return Object.entries(e.components).reduce((a,[c,v])=>{if(rates[c]===undefined)throw Error(`Missing rate for ${c}`);return a.plus(new D(v).times(rates[c]));},new D(0));
  }
- const net=new D(e.gross).minus(e.consumables).minus(e.pharmacyLab).minus(new D(e.gross).times(r.admin)).minus(new D(e.gross).times(r.refundable));
+ const deductions=billDeductions(e,r);
+ const net=new D(e.gross).minus(e.consumables).minus(e.pharmacyLab).minus(deductions.admin).minus(deductions.refundable);
  if(net.lt(0))throw Error(`Negative bill net amount: ${e.invoice}`);
  return net.times(r.share);
+}
+export function billDeductions(e:Extract<Entry,{kind:'bill'}>,r:ReturnType<typeof ruleAt>){
+ if((e.adminAmount!==undefined||e.refundableAmount!==undefined)&&(!e.deductionReason||e.deductionReason.trim().length<8))throw Error('Recorded deduction amounts require an audit reason');
+ return {admin:e.adminAmount!==undefined?new D(e.adminAmount):new D(e.gross).times(r.admin),refundable:e.refundableAmount!==undefined?new D(e.refundableAmount):new D(e.gross).times(r.refundable)};
 }
 export interface Cell {aed:string;inr:string;pct:string|null;ids:string[]}
 export interface Period {month:string;version:string;locked:boolean;rows:Record<string,Cell>;kpis:{cases:number;visits:number;target:number;achievement:string|null;mix:Record<string,number>};wallet:{opening:string;addition:string;spend:string;closing:string};prepaids:{id:string;monthlyNative:string;outstandingNative:string;currency:string}[]}
@@ -70,8 +76,9 @@ export function calculateMonth(ds:Dataset,month:string,version:'Actual'|'Approx'
   if(e.kind==='estimate'){
    if(version!=='Approx')throw Error('Estimates must be Approx');
    const net=new D(e.approval).times(new D(1).minus(e.consumablesRate));
-   // Approval less consumables is the estimated share base; doctor's payout is a disclosure.
-   allocate(e.hospital,e.date,net,e.id);cases++;visits+=e.visits;mix[e.procedure]=(mix[e.procedure]??0)+1;
+   // Gross approval -> net procedure charge -> doctor payout -> Swizton allocation.
+   const r=ruleAt(ds.masters,e.hospital,e.date);
+   allocate(e.hospital,e.date,net.times(r.forecastShare??r.share),e.id);cases++;visits+=e.visits;mix[e.procedure]=(mix[e.procedure]??0)+1;
   }
   if(e.kind==='receipt'){allocate(e.source,e.date,new D(e.amount),e.id);visits+=e.visits}
   if(e.kind==='wallet'&&e.action==='spend')add('Marketing Expense',new D(e.amount),e.id);
@@ -118,12 +125,12 @@ export function calculateYear(ds:Dataset,year:number){
 }
 export function entryFacts(e:Entry,m:Masters):Record<string,string>{
  if(e.kind==='bill'){
-  const r=ruleAt(m,e.hospital,e.date),final=billShare(e,m),component=m.hospitals.find(h=>h.id===e.hospital)?.method==='components';
-  return {method:component?'Component shares':'Net share',gross:e.gross,admin:component?'0':new D(e.gross).times(r.admin).toFixed(6),refundable:component?'0':new D(e.gross).times(r.refundable).toFixed(6),net:component?Object.values(e.components).reduce((s,v)=>s.plus(v),new D(0)).toFixed(6):new D(e.gross).minus(e.consumables).minus(e.pharmacyLab).minus(new D(e.gross).times(r.admin)).minus(new D(e.gross).times(r.refundable)).toFixed(6),shareRate:component?'Component-specific':r.share,finalShare:final.toFixed(6),swizton:final.times(r.swizton).toFixed(6),ruleId:r.id};
+  const r=ruleAt(m,e.hospital,e.date),final=billShare(e,m),deductions=billDeductions(e,r),component=m.hospitals.find(h=>h.id===e.hospital)?.method==='components';
+  return {method:component?'Component shares':'Net share',gross:e.gross,admin:component?'0':deductions.admin.toFixed(6),refundable:component?'0':deductions.refundable.toFixed(6),net:component?Object.values(e.components).reduce((s,v)=>s.plus(v),new D(0)).toFixed(6):new D(e.gross).minus(e.consumables).minus(e.pharmacyLab).minus(deductions.admin).minus(deductions.refundable).toFixed(6),shareRate:component?'Component-specific':r.share,finalShare:final.toFixed(6),swizton:final.times(r.swizton).toFixed(6),ruleId:r.id};
  }
  if(e.kind==='estimate'){
   const r=ruleAt(m,e.hospital,e.date),net=new D(e.approval).times(new D(1).minus(e.consumablesRate));
-  return {net:net.toFixed(6),doctorPayoutDisclosure:net.times(r.share).toFixed(6),swizton:net.times(r.swizton).toFixed(6),ruleId:r.id};
+  return {net:net.toFixed(6),doctorPayoutDisclosure:net.times(r.forecastShare??r.share).toFixed(6),swizton:net.times(r.forecastShare??r.share).times(r.swizton).toFixed(6),ruleId:r.id};
  }
  return {};
 }

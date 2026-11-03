@@ -3,3 +3,14 @@ dist/
 .env
 *.log
 coverage/
+# Uploaded workbooks and private financial reconciliation artifacts
+*.xlsx
+*.xls
+*.xlsm
+private/
+golden-source-rows.json
+reconciliation.json
+statement-baseline.json
+source-inventory.json
+correction-proposal.json
+adjustment-review.json

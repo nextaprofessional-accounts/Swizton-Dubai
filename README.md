@@ -2,7 +2,7 @@
 
 P&L and revenue-share management for **NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO**. React + TypeScript, Node/Express, PostgreSQL 16 and Decimal.js.
 
-**Working MVP with clearly labelled sample data. Exact FY 2026 workbook reconciliation is pending the original workbook, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
+**Working MVP with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
 
 ## Quick start: sample workspace
 
@@ -54,10 +54,11 @@ The default suite executes engine and API tests, with one database-only audit te
 - [Executable PostgreSQL schema](db/schema.sql)
 - [Calculation engine](server/engine.ts) and [unit tests](tests/engine.test.ts)
 - [API integration tests](tests/api.test.ts)
+- [Private workbook reconciliation workflow](docs/WORKBOOK_RECONCILIATION.md)
 - [Hospital bill CSV import template](docs/bills-template.csv)
 
 ## Financial conventions
 
 FY totals are **Actual only**. A separate working outlook uses Approx until a month is locked, then Actual. INR is reported in lakh and annually sums monthly FX translations. Missing historical comparisons remain missing. Prepaid costs use inclusive whole-month amortisation; wallet additions are never marketing expenses. Shares come from effective-dated masters. Every change requires a reason and is audited; locked periods reject covered inputs and master changes.
 
-The source workbook must settle the CSH/IMH deduction base, Approx approval/payout basis, refundable treatment and exact layout. XLSX has Jan–Dec Approx/Actual blocks with three currencies/ratio columns; PDF currently uses readable monthly pages. Statutory VAT/Corporate Tax calculation, fixed/variable cost accounting, settlement workflows, SSO/MFA and production security/backup operations remain explicit follow-up scope. See the architecture document for the complete acceptance boundary.
+Workbook inspection confirmed the forecast chain (gross approval → net procedure charge → doctor payout → Swizton share). Recorded bill deductions now support reasoned overrides. Deduction bases, refundable treatment, recognition timing, source errors, FX approvals and exact automated print layout remain to be settled. XLSX has Jan–Dec Approx/Actual blocks with three currencies/ratio columns; PDF currently uses readable monthly pages. Statutory VAT/Corporate Tax calculation, fixed/variable cost accounting, settlement workflows, SSO/MFA and production security/backup operations remain explicit follow-up scope. See the architecture document for the complete acceptance boundary.
