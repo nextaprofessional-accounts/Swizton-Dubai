@@ -1,6 +1,10 @@
 const { chromium } = require('playwright');
 const { existsSync } = require('node:fs');
+const { randomUUID } = require('node:crypto');
 (async () => {
+  const runId = randomUUID().slice(0, 8);
+  const patientReference = `Browser synthetic ${runId}`;
+  const procedureName = `Synthetic Browser Procedure ${runId}`;
   const health = await (await fetch('http://127.0.0.1:3001/api/health')).json();
   if (!health.demo) throw Error('Browser smoke test requires isolated DEMO_MODE=true');
   const browser = await chromium.launch({
@@ -45,7 +49,7 @@ const { existsSync } = require('node:fs');
       await page.getByRole('button', { name: 'receipt', exact: true }).click();
       await page
         .getByRole('textbox', { name: 'Patient / reference', exact: true })
-        .fill('Browser synthetic reference');
+        .fill(patientReference);
       await page
         .getByLabel('Revenue recognition month (optional)', { exact: true })
         .fill('2026-07');
@@ -56,7 +60,10 @@ const { existsSync } = require('node:fs');
       await page.getByRole('button', { name: 'Save record', exact: true }).click();
       await page.getByRole('status').getByText('Saved successfully', { exact: true }).waitFor();
       await page.getByRole('combobox', { name: 'Month', exact: true }).selectOption('6');
-      await page.getByRole('cell', { name: 'Browser synthetic reference', exact: true }).waitFor();
+      await page
+        .getByRole('textbox', { name: 'Search source records', exact: true })
+        .fill(patientReference);
+      await page.getByRole('cell', { name: patientReference, exact: true }).waitFor();
       await page.getByRole('combobox', { name: 'Month', exact: true }).selectOption('5');
     }
     if (name === 'Budget planner') {
@@ -67,15 +74,13 @@ const { existsSync } = require('node:fs');
       await page.getByRole('button', { name: 'procedures', exact: true }).click();
       await page.getByRole('cell', { name: 'VenaSeal', exact: true }).waitFor();
       await page.getByRole('button', { name: '+ Add record', exact: true }).click();
-      await page
-        .getByRole('textbox', { name: 'Name', exact: true })
-        .fill('Synthetic Browser Procedure');
+      await page.getByRole('textbox', { name: 'Name', exact: true }).fill(procedureName);
       await page.getByRole('button', { name: 'Stage this change', exact: true }).click();
       await page
         .getByRole('textbox', { name: 'Approval / change reason', exact: true })
         .fill('Synthetic master workflow check');
       await page.getByRole('button', { name: 'Save master changes', exact: true }).click();
-      await page.getByRole('cell', { name: 'Synthetic Browser Procedure', exact: true }).waitFor();
+      await page.getByRole('cell', { name: procedureName, exact: true }).waitFor();
     }
     if (name === 'Workbook review') {
       await page.getByText('Feeder calculation evidence', { exact: true }).waitFor();
