@@ -1,26 +1,421 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {Decimal as D} from 'decimal.js';
-import {demoDataset} from '../server/demo.ts';import {calculateMonth,calculateYear,billShare,ruleAt,affectedMonths,validateMasters} from '../server/engine.ts';import {assertUnlocked,validateDataset} from '../server/validation.ts';import {budget,analytics} from '../server/analytics.ts';import {entrySchema,type Dataset,type Entry} from '../server/model.ts';
-function fixture():Dataset {const d=demoDataset();d.entries=[];return d}
-function bill(extra:Record<string,unknown>={}):Extract<Entry,{kind:'bill'}>{return entrySchema.parse({id:randomUUID(),kind:'bill',date:'2026-01-10',version:'Actual',hospital:'CSH',patient:'Synthetic test patient',procedure:'RFA',doctor:'Dr. Tahsin',billType:'IP',payment:'Cash',invoice:randomUUID(),gross:'10000',consumables:'1000',pharmacyLab:'1000',regime:'Standard',components:{},visits:2,vat:'0',tax:'0',...extra}) as Extract<Entry,{kind:'bill'}>}
-const num=(s:string)=>Number(new D(s).toFixed(2));
-test('CSH reference arithmetic: final 3150; Chinmay 441; Swizton 945; Tahsin 1764',()=>{const d=fixture();d.entries=[bill()];const p=calculateMonth(d,'2026-01','Actual');assert.equal(num(p.rows.CSH.aed),3150);assert.equal(num(p.rows['Dr. Chinmay – Professional Fee'].aed),441);assert.equal(num(p.rows['Swizton Revenue'].aed),945);assert.equal(num(p.rows['Dr. Tahsin – Professional Fee'].aed),1764);assert.equal(p.rows['Swizton Revenue'].pct,'100.0000');assert.equal(p.kpis.cases,1);assert.equal(p.kpis.visits,2);assert.equal(p.kpis.mix.RFA,1);assert.equal(p.kpis.achievement,'5.00')});
-test('Al Garhoud uses components and separately effective regime rates',()=>{const d=fixture(),e=bill({hospital:'Al Garhoud',components:{Consultation:'1000',Lab:'100','Surgeon Fee':'500'}});assert.equal(billShare(e,d.masters).toString(),'1020');const r=ruleAt(d.masters,'Al Garhoud',e.date);r.components.HMS={...r.components.HMS,Consultation:'0.6'};assert.equal(billShare({...e,regime:'HMS'},d.masters).toString(),'1120');r.components['Insurance-OP']={...r.components['Insurance-OP'],Consultation:'0.4'};assert.equal(billShare({...e,regime:'Insurance-OP'},d.masters).toString(),'920')});
-test('eligibility is configurable and doctor allocations reconcile',()=>{const d=fixture();d.entries=[bill({hospital:'IMH'})];ruleAt(d.masters,'IMH','2026-01-10').chinmayEligible=false;const p=calculateMonth(d,'2026-01','Actual');assert.equal(num(p.rows['Dr. Chinmay – Professional Fee'].aed),0);const allocated=['Swizton Revenue','Dr. Chinmay – Professional Fee','Dr. Tahsin – Professional Fee'].reduce((a,l)=>a.plus(p.rows[l].aed),new D(0));assert.equal(allocated.toString(),new D(p.rows['Total Revenue'].aed).toString())});
-test('annual AED 21100 is recognised evenly with O/S in original currency',()=>{const d=fixture();d.entries=[entrySchema.parse({id:randomUUID(),kind:'expense',date:'2026-01-01',version:'Actual',head:'Trade License',amount:'21100',currency:'AED',basis:'Accrual',paid:true,remarks:'Test',coverageStart:'2026-01-01',coverageEnd:'2026-12-31'})];const p=calculateMonth(d,'2026-01','Actual');assert.equal(num(p.rows['Administration Expense'].aed),1758.33);assert.equal(num(p.prepaids[0].outstandingNative),19341.67);assert.equal(num(calculateYear(d,2026).total['Administration Expense'].aed),21100);assert.equal(num(calculateMonth(d,'2026-12','Actual').prepaids[0].outstandingNative),0)});
-test('monthly FX is used consistently; annual INR is a sum of monthly translations',()=>{const d=fixture();d.entries=[bill(),bill({date:'2026-02-10'})];d.masters.fx[1].inrPerAed='26';const r=calculateYear(d,2026);assert.equal(Number(r.total['Swizton Revenue'].inr),.48195);assert.equal(Number(r.total['Swizton Revenue'].aed),1890)});
-test('INR expenses are converted using recognition-month central FX',()=>{const d=fixture();d.entries=[entrySchema.parse({id:randomUUID(),kind:'expense',date:'2026-01-10',version:'Actual',head:'Bank Charges',amount:'2500',currency:'INR',basis:'Actual',paid:true,remarks:'Test',coverageStart:null,coverageEnd:null})];const p=calculateMonth(d,'2026-01','Actual');assert.equal(num(p.rows['Finance & Other Expense'].aed),100);assert.equal(Number(p.rows['Finance & Other Expense'].inr),.025)});
-test('wallet advance is never expensed; monthly spend and carryforward reconcile',()=>{const d=fixture();for(const [date,action,amount] of [['2026-01-01','opening','500'],['2026-01-02','topup','1000'],['2026-01-05','spend','300'],['2026-02-03','spend','200']])d.entries.push(entrySchema.parse({id:randomUUID(),kind:'wallet',version:'Actual',date,action,amount,remarks:'Test'}));assert.equal(num(calculateMonth(d,'2026-01','Actual').rows['Marketing Expense'].aed),300);const feb=calculateMonth(d,'2026-02','Actual');assert.deepEqual(feb.wallet,{opening:'1200.00',addition:'0.00',spend:'200.00',closing:'1000.00'})});
-test('FY is Actual-only; working outlook switches to Actual only on lock',()=>{const d=fixture();d.entries=[bill(),entrySchema.parse({id:randomUUID(),kind:'estimate',date:'2026-01-11',version:'Approx',hospital:'CSH',patient:'Test',procedure:'RFA',contact:'',leadSource:'Referral',payment:'Cash',approval:'1000',consumablesRate:'0.1',visits:1})];let r=calculateYear(d,2026);assert.equal(num(r.total['Swizton Revenue'].aed),945);assert.equal(r.kpis.cases,1);assert.equal(r.kpis.mix.RFA,1);assert.equal(num(r.outlook['Swizton Revenue'].aed),121.5);d.closes=[{month:'2026-01',locked:true,by:'test',at:'test',reason:'Verified'}];r=calculateYear(d,2026);assert.equal(num(r.outlook['Swizton Revenue'].aed),945)});
-test('missing FX/rules, overlapping rules, negative nets, unknown rates fail explicitly',()=>{const d=fixture();d.entries=[bill()];d.masters.fx=[];assert.throws(()=>calculateMonth(d,'2026-01','Actual'),/FX/);d.masters=fixture().masters;assert.throws(()=>billShare(bill({gross:'100'}),d.masters),/Negative/);const rule=d.masters.rules[0];d.masters.rules.push({...rule,id:'overlap'});assert.throws(()=>validateMasters(d.masters),/Overlapping/);assert.throws(()=>ruleAt(d.masters,'CSH','2027-01-01'),/Expected one/);assert.throws(()=>billShare(bill({hospital:'Al Garhoud',components:{Undefined:'100'}}),d.masters),/Missing rate/)});
-test('zero revenue has null percentage, never infinity',()=>{const p=calculateMonth(fixture(),'2026-01','Actual');assert.equal(p.rows['Total Expense'].pct,null);assert.equal(p.kpis.achievement,'0.00')});
-test('source adjustments reallocate shares and preserve drilldown',()=>{const d=fixture();const e=entrySchema.parse({id:randomUUID(),kind:'adjustment',date:'2026-01-01',version:'Actual',line:'CSH',amount:'-2000',reason:'Correct source overstatement'});d.entries=[bill(),e];const p=calculateMonth(d,'2026-01','Actual');assert.equal(num(p.rows.CSH.aed),1150);assert.equal(num(p.rows['Swizton Revenue'].aed),345);assert.ok(p.rows['NET PROFIT / LOSS'].ids.includes(e.id));assert.equal(e.kind,'adjustment');d.entries=[{...(e as Extract<Entry,{kind:'adjustment'}>),line:'NET PROFIT / LOSS'}];assert.throws(()=>calculateMonth(d,'2026-01','Actual'),/derived total/)});
-test('locked periods also reject annual coverage crossing the period',()=>{const d=fixture();d.closes=[{month:'2026-03',locked:true,by:'test',at:'test',reason:'Closed'}];const e=entrySchema.parse({id:randomUUID(),kind:'expense',date:'2026-01-01',version:'Actual',head:'Visas',amount:'1200',currency:'AED',basis:'Accrual',paid:true,remarks:'Test',coverageStart:'2026-01-01',coverageEnd:'2026-12-31'});assert.equal(affectedMonths(e).length,12);assert.throws(()=>assertUnlocked(d,e),/locked/)});
-test('duplicate invoices and invalid calendar dates are rejected',()=>{const d=fixture();d.entries=[bill({invoice:'DUP'}),bill({invoice:'DUP'})];assert.throws(()=>validateDataset(d),/Duplicate hospital invoice/);assert.throws(()=>bill({date:'2026-02-30'}),/Invalid calendar/)});
-test('historical data is explicitly missing until provided; combined does not invent zeros',()=>{const d=fixture();d.entries=[bill()];const r=calculateYear(d,2026);assert.equal(r.comparatives['2025']['Swizton Revenue'],null);assert.equal(r.combined['Swizton Revenue'],null);for(const year of [2023,2024,2025])d.masters.comparatives.push({year,line:'Swizton Revenue',aed:'100',inrLakh:'0.025'});assert.equal(calculateYear(d,2026).combined['Swizton Revenue']!.aed,'1245.000000')});
-test('effective date boundary and custom hospital work',()=>{const d=fixture();const r=d.masters.rules[0];r.effectiveTo='2026-06-30';d.masters.rules.push({...r,id:'new',effectiveFrom:'2026-07-01',effectiveTo:'2026-12-31',swizton:'0.4'});assert.equal(ruleAt(d.masters,'CSH','2026-07-01').swizton,'0.4');d.masters.hospitals.push({id:'New Hospital',name:'New Hospital',method:'net-share'});d.masters.rules.push({...r,id:'custom',hospital:'New Hospital'});d.entries=[bill({hospital:'New Hospital'})];assert.equal(num(calculateMonth(d,'2026-01','Actual').rows['New Hospital'].aed),3150)});
-test('budget uses master share; analytics matrix reconciles case contributions',()=>{const d=fixture();d.entries=[bill()];assert.equal(budget(d,'2026-01',[{hospital:'CSH',procedure:'RFA',cases:10,revenuePerCase:'1000'}],'2000').profit,'1000.00');const a=analytics(d,'2026-01');assert.equal(a.ranking[0].swizton,'945.00');assert.equal(a.ranking[0].cases,1)});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { Decimal as D } from 'decimal.js';
+import { demoDataset } from '../server/demo.ts';
+import {
+  calculateMonth,
+  calculateYear,
+  billShare,
+  ruleAt,
+  affectedMonths,
+  validateMasters,
+} from '../server/engine.ts';
+import { assertUnlocked, validateDataset } from '../server/validation.ts';
+import { budget, analytics } from '../server/analytics.ts';
+import { entrySchema, type Dataset, type Entry } from '../server/model.ts';
+function fixture(): Dataset {
+  const d = demoDataset();
+  d.entries = [];
+  return d;
+}
+function bill(extra: Record<string, unknown> = {}): Extract<Entry, { kind: 'bill' }> {
+  return entrySchema.parse({
+    id: randomUUID(),
+    kind: 'bill',
+    date: '2026-01-10',
+    version: 'Actual',
+    hospital: 'CSH',
+    patient: 'Synthetic test patient',
+    procedure: 'RFA',
+    doctor: 'Dr. Tahsin',
+    billType: 'IP',
+    payment: 'Cash',
+    invoice: randomUUID(),
+    gross: '10000',
+    consumables: '1000',
+    pharmacyLab: '1000',
+    regime: 'Standard',
+    components: {},
+    visits: 2,
+    vat: '0',
+    tax: '0',
+    ...extra,
+  }) as Extract<Entry, { kind: 'bill' }>;
+}
+const num = (s: string) => Number(new D(s).toFixed(2));
+test('CSH reference arithmetic: final 3150; Chinmay 441; Swizton 945; Tahsin 1764', () => {
+  const d = fixture();
+  d.entries = [bill()];
+  const p = calculateMonth(d, '2026-01', 'Actual');
+  assert.equal(num(p.rows.CSH.aed), 3150);
+  assert.equal(num(p.rows['Dr. Chinmay – Professional Fee'].aed), 441);
+  assert.equal(num(p.rows['Swizton Revenue'].aed), 945);
+  assert.equal(num(p.rows['Dr. Tahsin – Professional Fee'].aed), 1764);
+  assert.equal(p.rows['Swizton Revenue'].pct, '100.0000');
+  assert.equal(p.kpis.cases, 1);
+  assert.equal(p.kpis.visits, 2);
+  assert.equal(p.kpis.mix.RFA, 1);
+  assert.equal(p.kpis.achievement, '5.00');
+});
+test('Al Garhoud uses components and separately effective regime rates', () => {
+  const d = fixture(),
+    e = bill({
+      hospital: 'Al Garhoud',
+      components: { Consultation: '1000', Lab: '100', 'Surgeon Fee': '500' },
+    });
+  assert.equal(billShare(e, d.masters).toString(), '1020');
+  const r = ruleAt(d.masters, 'Al Garhoud', e.date);
+  r.components.HMS = { ...r.components.HMS, Consultation: '0.6' };
+  assert.equal(billShare({ ...e, regime: 'HMS' }, d.masters).toString(), '1120');
+  r.components['Insurance-OP'] = { ...r.components['Insurance-OP'], Consultation: '0.4' };
+  assert.equal(billShare({ ...e, regime: 'Insurance-OP' }, d.masters).toString(), '920');
+});
+test('eligibility is configurable and doctor allocations reconcile', () => {
+  const d = fixture();
+  d.entries = [bill({ hospital: 'IMH' })];
+  ruleAt(d.masters, 'IMH', '2026-01-10').chinmayEligible = false;
+  const p = calculateMonth(d, '2026-01', 'Actual');
+  assert.equal(num(p.rows['Dr. Chinmay – Professional Fee'].aed), 0);
+  const allocated = [
+    'Swizton Revenue',
+    'Dr. Chinmay – Professional Fee',
+    'Dr. Tahsin – Professional Fee',
+  ].reduce((a, l) => a.plus(p.rows[l].aed), new D(0));
+  assert.equal(allocated.toString(), new D(p.rows['Total Revenue'].aed).toString());
+});
+test('annual AED 21100 is recognised evenly with O/S in original currency', () => {
+  const d = fixture();
+  d.entries = [
+    entrySchema.parse({
+      id: randomUUID(),
+      kind: 'expense',
+      date: '2026-01-01',
+      version: 'Actual',
+      head: 'Trade License',
+      amount: '21100',
+      currency: 'AED',
+      basis: 'Accrual',
+      paid: true,
+      remarks: 'Test',
+      coverageStart: '2026-01-01',
+      coverageEnd: '2026-12-31',
+    }),
+  ];
+  const p = calculateMonth(d, '2026-01', 'Actual');
+  assert.equal(num(p.rows['Administration Expense'].aed), 1758.33);
+  assert.equal(num(p.prepaids[0].outstandingNative), 19341.67);
+  assert.equal(num(calculateYear(d, 2026).total['Administration Expense'].aed), 21100);
+  assert.equal(num(calculateMonth(d, '2026-12', 'Actual').prepaids[0].outstandingNative), 0);
+});
+test('monthly FX is used consistently; annual INR is a sum of monthly translations', () => {
+  const d = fixture();
+  d.entries = [bill(), bill({ date: '2026-02-10' })];
+  d.masters.fx[1].inrPerAed = '26';
+  const r = calculateYear(d, 2026);
+  assert.equal(Number(r.total['Swizton Revenue'].inr), 0.48195);
+  assert.equal(Number(r.total['Swizton Revenue'].aed), 1890);
+});
+test('INR expenses are converted using recognition-month central FX', () => {
+  const d = fixture();
+  d.entries = [
+    entrySchema.parse({
+      id: randomUUID(),
+      kind: 'expense',
+      date: '2026-01-10',
+      version: 'Actual',
+      head: 'Bank Charges',
+      amount: '2500',
+      currency: 'INR',
+      basis: 'Actual',
+      paid: true,
+      remarks: 'Test',
+      coverageStart: null,
+      coverageEnd: null,
+    }),
+  ];
+  const p = calculateMonth(d, '2026-01', 'Actual');
+  assert.equal(num(p.rows['Finance & Other Expense'].aed), 100);
+  assert.equal(Number(p.rows['Finance & Other Expense'].inr), 0.025);
+});
+test('wallet advance is never expensed; monthly spend and carryforward reconcile', () => {
+  const d = fixture();
+  for (const [date, action, amount] of [
+    ['2026-01-01', 'opening', '500'],
+    ['2026-01-02', 'topup', '1000'],
+    ['2026-01-05', 'spend', '300'],
+    ['2026-02-03', 'spend', '200'],
+  ])
+    d.entries.push(
+      entrySchema.parse({
+        id: randomUUID(),
+        kind: 'wallet',
+        version: 'Actual',
+        date,
+        action,
+        amount,
+        remarks: 'Test',
+      }),
+    );
+  assert.equal(num(calculateMonth(d, '2026-01', 'Actual').rows['Marketing Expense'].aed), 300);
+  const feb = calculateMonth(d, '2026-02', 'Actual');
+  assert.deepEqual(feb.wallet, {
+    opening: '1200.00',
+    addition: '0.00',
+    spend: '200.00',
+    closing: '1000.00',
+  });
+});
+test('FY is Actual-only; working outlook switches to Actual only on lock', () => {
+  const d = fixture();
+  d.entries = [
+    bill(),
+    entrySchema.parse({
+      id: randomUUID(),
+      kind: 'estimate',
+      date: '2026-01-11',
+      version: 'Approx',
+      hospital: 'CSH',
+      patient: 'Test',
+      procedure: 'RFA',
+      contact: '',
+      leadSource: 'Referral',
+      payment: 'Cash',
+      approval: '1000',
+      consumablesRate: '0.1',
+      visits: 1,
+    }),
+  ];
+  let r = calculateYear(d, 2026);
+  assert.equal(num(r.total['Swizton Revenue'].aed), 945);
+  assert.equal(r.kpis.cases, 1);
+  assert.equal(r.kpis.mix.RFA, 1);
+  assert.equal(num(r.outlook['Swizton Revenue'].aed), 121.5);
+  d.closes = [{ month: '2026-01', locked: true, by: 'test', at: 'test', reason: 'Verified' }];
+  r = calculateYear(d, 2026);
+  assert.equal(num(r.outlook['Swizton Revenue'].aed), 945);
+});
+test('missing FX/rules, overlapping rules, negative nets, unknown rates fail explicitly', () => {
+  const d = fixture();
+  d.entries = [bill()];
+  d.masters.fx = [];
+  assert.throws(() => calculateMonth(d, '2026-01', 'Actual'), /FX/);
+  d.masters = fixture().masters;
+  assert.throws(() => billShare(bill({ gross: '100' }), d.masters), /Negative/);
+  const rule = d.masters.rules[0];
+  d.masters.rules.push({ ...rule, id: 'overlap' });
+  assert.throws(() => validateMasters(d.masters), /Overlapping/);
+  assert.throws(() => ruleAt(d.masters, 'CSH', '2027-01-01'), /Expected one/);
+  assert.throws(
+    () => billShare(bill({ hospital: 'Al Garhoud', components: { Undefined: '100' } }), d.masters),
+    /Missing rate/,
+  );
+});
+test('zero revenue has null percentage, never infinity', () => {
+  const p = calculateMonth(fixture(), '2026-01', 'Actual');
+  assert.equal(p.rows['Total Expense'].pct, null);
+  assert.equal(p.kpis.achievement, '0.00');
+});
+test('source adjustments reallocate shares and preserve drilldown', () => {
+  const d = fixture();
+  const e = entrySchema.parse({
+    id: randomUUID(),
+    kind: 'adjustment',
+    date: '2026-01-01',
+    version: 'Actual',
+    line: 'CSH',
+    amount: '-2000',
+    reason: 'Correct source overstatement',
+  });
+  d.entries = [bill(), e];
+  const p = calculateMonth(d, '2026-01', 'Actual');
+  assert.equal(num(p.rows.CSH.aed), 1150);
+  assert.equal(num(p.rows['Swizton Revenue'].aed), 345);
+  assert.ok(p.rows['NET PROFIT / LOSS'].ids.includes(e.id));
+  assert.equal(e.kind, 'adjustment');
+  d.entries = [{ ...(e as Extract<Entry, { kind: 'adjustment' }>), line: 'NET PROFIT / LOSS' }];
+  assert.throws(() => calculateMonth(d, '2026-01', 'Actual'), /derived total/);
+});
+test('locked periods also reject annual coverage crossing the period', () => {
+  const d = fixture();
+  d.closes = [{ month: '2026-03', locked: true, by: 'test', at: 'test', reason: 'Closed' }];
+  const e = entrySchema.parse({
+    id: randomUUID(),
+    kind: 'expense',
+    date: '2026-01-01',
+    version: 'Actual',
+    head: 'Visas',
+    amount: '1200',
+    currency: 'AED',
+    basis: 'Accrual',
+    paid: true,
+    remarks: 'Test',
+    coverageStart: '2026-01-01',
+    coverageEnd: '2026-12-31',
+  });
+  assert.equal(affectedMonths(e).length, 12);
+  assert.throws(() => assertUnlocked(d, e), /locked/);
+});
+test('duplicate invoices and invalid calendar dates are rejected', () => {
+  const d = fixture();
+  d.entries = [bill({ invoice: 'DUP' }), bill({ invoice: 'DUP' })];
+  assert.throws(() => validateDataset(d), /Duplicate hospital invoice/);
+  assert.throws(() => bill({ date: '2026-02-30' }), /Invalid calendar/);
+});
+test('historical data is explicitly missing until provided; combined does not invent zeros', () => {
+  const d = fixture();
+  d.entries = [bill()];
+  const r = calculateYear(d, 2026);
+  assert.equal(r.comparatives['2025']['Swizton Revenue'], null);
+  assert.equal(r.combined['Swizton Revenue'], null);
+  for (const year of [2023, 2024, 2025])
+    d.masters.comparatives.push({ year, line: 'Swizton Revenue', aed: '100', inrLakh: '0.025' });
+  assert.equal(calculateYear(d, 2026).combined['Swizton Revenue']!.aed, '1245.000000');
+});
+test('effective date boundary and custom hospital work', () => {
+  const d = fixture();
+  const r = d.masters.rules[0];
+  r.effectiveTo = '2026-06-30';
+  d.masters.rules.push({
+    ...r,
+    id: 'new',
+    effectiveFrom: '2026-07-01',
+    effectiveTo: '2026-12-31',
+    swizton: '0.4',
+  });
+  assert.equal(ruleAt(d.masters, 'CSH', '2026-07-01').swizton, '0.4');
+  d.masters.hospitals.push({ id: 'New Hospital', name: 'New Hospital', method: 'net-share' });
+  d.masters.rules.push({ ...r, id: 'custom', hospital: 'New Hospital' });
+  d.entries = [bill({ hospital: 'New Hospital' })];
+  assert.equal(num(calculateMonth(d, '2026-01', 'Actual').rows['New Hospital'].aed), 3150);
+});
+test('budget uses master share; analytics matrix reconciles case contributions', () => {
+  const d = fixture();
+  d.entries = [bill()];
+  assert.equal(
+    budget(
+      d,
+      '2026-01',
+      [{ hospital: 'CSH', procedure: 'RFA', cases: 10, revenuePerCase: '1000' }],
+      '2000',
+    ).profit,
+    '1000.00',
+  );
+  const a = analytics(d, '2026-01');
+  assert.equal(a.ranking[0].swizton, '945.00');
+  assert.equal(a.ranking[0].cases, 1);
+});
 
-test('recorded bill deductions preserve approved amounts and require an audit reason',()=>{const d=fixture();const e=bill({gross:'11000',consumables:'3000',pharmacyLab:'200',adminAmount:'500',refundableAmount:'500',deductionReason:'Agreed actual deduction base'});assert.equal(billShare(e,d.masters).toFixed(2),'3060.00');assert.throws(()=>billShare({...e,deductionReason:undefined},d.masters),/audit reason/);assert.throws(()=>billShare({...e,hospital:'Al Garhoud',components:{Consultation:'100'}},d.masters),/net-share bills/)});
-test('forecast pays doctor share before Swizton allocation, including fee-for-service forecast rules',()=>{const d=fixture();const e=entrySchema.parse({id:randomUUID(),kind:'estimate',date:'2026-01-10',version:'Approx',hospital:'CSH',patient:'Synthetic',procedure:'RFA',contact:'',leadSource:'Test',payment:'Insurance',approval:'10000',consumablesRate:'0.2',visits:1});d.entries=[e];assert.equal(num(calculateMonth(d,'2026-01','Approx').rows['Total Revenue'].aed),3600);assert.equal(num(calculateMonth(d,'2026-01','Approx').rows['Swizton Revenue'].aed),1080);ruleAt(d.masters,'CSH',e.date).forecastShare='1';assert.equal(num(calculateMonth(d,'2026-01','Approx').rows['Swizton Revenue'].aed),2400)});
-test('recognition month preserves invoice date, historical share rule, monthly FX and original case period',()=>{const d=fixture();for(const r of d.masters.rules)r.effectiveFrom='2025-01-01';d.masters.fx.push({month:'2025-12',inrPerAed:'24',aedPerUsd:'3.6725',source:'Synthetic test'});const e=bill({date:'2025-12-10',recognitionMonth:'2026-01'});d.entries=[e];const historicalFx=d.masters.fx.pop()!;assert.doesNotThrow(()=>validateDataset(d));d.masters.fx.push(historicalFx);const jan=calculateMonth(d,'2026-01','Actual'),dec=calculateMonth(d,'2025-12','Actual');assert.equal(e.date,'2025-12-10');assert.equal(num(jan.rows.CSH.aed),3150);assert.equal(Number(jan.rows.CSH.inr),.7875);assert.equal(jan.kpis.cases,0);assert.equal(jan.kpis.visits,0);assert.equal(num(dec.rows.CSH.aed),0);assert.equal(dec.kpis.cases,1);assert.equal(dec.kpis.visits,2);for(const month of ['2025-12','2026-01']){d.closes=[{month,locked:true,by:'test',at:'test',reason:'Test lock'}];assert.throws(()=>assertUnlocked(d,e),/locked/)};assert.throws(()=>bill({recognitionMonth:'2026-13'}));});
-test('receipt recognition can differ from original occurrence without moving visit KPIs',()=>{const d=fixture();d.entries=[entrySchema.parse({id:randomUUID(),kind:'receipt',date:'2026-01-15',recognitionMonth:'2026-02',version:'Actual',source:'OP Consultation',amount:'100',patient:'Synthetic',visits:1})];assert.equal(num(calculateMonth(d,'2026-01','Actual').rows['OP Consultation'].aed),0);assert.equal(calculateMonth(d,'2026-01','Actual').kpis.visits,1);assert.equal(num(calculateMonth(d,'2026-02','Actual').rows['OP Consultation'].aed),100);assert.equal(calculateMonth(d,'2026-02','Actual').kpis.visits,0)});
+test('recorded bill deductions preserve approved amounts and require an audit reason', () => {
+  const d = fixture();
+  const e = bill({
+    gross: '11000',
+    consumables: '3000',
+    pharmacyLab: '200',
+    adminAmount: '500',
+    refundableAmount: '500',
+    deductionReason: 'Agreed actual deduction base',
+  });
+  assert.equal(billShare(e, d.masters).toFixed(2), '3060.00');
+  assert.throws(() => billShare({ ...e, deductionReason: undefined }, d.masters), /audit reason/);
+  assert.throws(
+    () =>
+      billShare({ ...e, hospital: 'Al Garhoud', components: { Consultation: '100' } }, d.masters),
+    /net-share bills/,
+  );
+});
+test('forecast pays doctor share before Swizton allocation, including fee-for-service forecast rules', () => {
+  const d = fixture();
+  const e = entrySchema.parse({
+    id: randomUUID(),
+    kind: 'estimate',
+    date: '2026-01-10',
+    version: 'Approx',
+    hospital: 'CSH',
+    patient: 'Synthetic',
+    procedure: 'RFA',
+    contact: '',
+    leadSource: 'Test',
+    payment: 'Insurance',
+    approval: '10000',
+    consumablesRate: '0.2',
+    visits: 1,
+  });
+  d.entries = [e];
+  assert.equal(num(calculateMonth(d, '2026-01', 'Approx').rows['Total Revenue'].aed), 3600);
+  assert.equal(num(calculateMonth(d, '2026-01', 'Approx').rows['Swizton Revenue'].aed), 1080);
+  ruleAt(d.masters, 'CSH', e.date).forecastShare = '1';
+  assert.equal(num(calculateMonth(d, '2026-01', 'Approx').rows['Swizton Revenue'].aed), 2400);
+});
+test('recognition month preserves invoice date, historical share rule, monthly FX and original case period', () => {
+  const d = fixture();
+  for (const r of d.masters.rules) r.effectiveFrom = '2025-01-01';
+  d.masters.fx.push({
+    month: '2025-12',
+    inrPerAed: '24',
+    aedPerUsd: '3.6725',
+    source: 'Synthetic test',
+  });
+  const e = bill({ date: '2025-12-10', recognitionMonth: '2026-01' });
+  d.entries = [e];
+  const historicalFx = d.masters.fx.pop()!;
+  assert.doesNotThrow(() => validateDataset(d));
+  d.masters.fx.push(historicalFx);
+  const jan = calculateMonth(d, '2026-01', 'Actual'),
+    dec = calculateMonth(d, '2025-12', 'Actual');
+  assert.equal(e.date, '2025-12-10');
+  assert.equal(num(jan.rows.CSH.aed), 3150);
+  assert.equal(Number(jan.rows.CSH.inr), 0.7875);
+  assert.equal(jan.kpis.cases, 0);
+  assert.equal(jan.kpis.visits, 0);
+  assert.equal(num(dec.rows.CSH.aed), 0);
+  assert.equal(dec.kpis.cases, 1);
+  assert.equal(dec.kpis.visits, 2);
+  for (const month of ['2025-12', '2026-01']) {
+    d.closes = [{ month, locked: true, by: 'test', at: 'test', reason: 'Test lock' }];
+    assert.throws(() => assertUnlocked(d, e), /locked/);
+  }
+  assert.throws(() => bill({ recognitionMonth: '2026-13' }));
+});
+test('receipt recognition can differ from original occurrence without moving visit KPIs', () => {
+  const d = fixture();
+  d.entries = [
+    entrySchema.parse({
+      id: randomUUID(),
+      kind: 'receipt',
+      date: '2026-01-15',
+      recognitionMonth: '2026-02',
+      version: 'Actual',
+      source: 'OP Consultation',
+      amount: '100',
+      patient: 'Synthetic',
+      visits: 1,
+    }),
+  ];
+  assert.equal(num(calculateMonth(d, '2026-01', 'Actual').rows['OP Consultation'].aed), 0);
+  assert.equal(calculateMonth(d, '2026-01', 'Actual').kpis.visits, 1);
+  assert.equal(num(calculateMonth(d, '2026-02', 'Actual').rows['OP Consultation'].aed), 100);
+  assert.equal(calculateMonth(d, '2026-02', 'Actual').kpis.visits, 0);
+});
+test('approved eligible-revenue exclusions change doctor allocations without altering revenue or Swizton profit', () => {
+  const d = fixture(),
+    e = bill();
+  const correction = entrySchema.parse({
+    id: randomUUID(),
+    kind: 'adjustment',
+    adjustmentType: 'ChinmayEligibility',
+    date: '2026-01-15',
+    version: 'Actual',
+    line: 'CSH',
+    amount: '-100',
+    reason: 'Exclude documented noneligible receipts',
+  });
+  d.entries = [e, correction];
+  const p = calculateMonth(d, '2026-01', 'Actual');
+  assert.equal(num(p.rows['Total Revenue'].aed), 3150);
+  assert.equal(num(p.rows['Swizton Revenue'].aed), 945);
+  assert.equal(num(p.rows['Dr. Chinmay – Professional Fee'].aed), 427);
+  assert.equal(num(p.rows['Dr. Tahsin – Professional Fee'].aed), 1778);
+  assert.ok(p.rows['Dr. Tahsin – Professional Fee'].ids.includes(correction.id));
+  assert.equal(num(p.rows['NET PROFIT / LOSS'].aed), 945);
+});

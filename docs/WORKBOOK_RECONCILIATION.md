@@ -11,17 +11,17 @@ The output directory **must be outside the repository**. The tool rejects a dire
 
 ## Artifacts
 
-| File | Meaning |
-|---|---|
-| `source-inventory.json` | Sheet dimensions, visibility, formula counts, missing caches and error addresses |
-| `statement-baseline.json` | FY2026 statement cells, cached values, formulas and number formats |
-| `statement-baseline.xlsx` | Formatted source P&L snapshot, same source cells through BY45; formulas replaced with their cached values, including zero, false and errors |
-| `golden-source-rows.json` | Pseudonymous bill/component/forecast fixtures with observed source rates and expected cached outputs; no clinical identities |
-| `reconciliation.json` | Arithmetic exceptions, forecast references in Actual, FX observations, embedded numeric terms, source-row engine checks, invoice-date/source-report comparison and timing exceptions |
-| `migration-decisions.json` | User accounting decisions, retained on read-only reruns; not automatically applied to live masters or entries |
-| `correction-proposal.json` | Explicit, unapproved bridge from cached FY totals to sums of monthly Actuals |
-| `adjustment-review.json` | Embedded numeric terms awaiting business reason and Finance approval; no automatic postings |
-| `REPORT.md` | Private review summary, arithmetic differences and decisions needed before migration |
+| File                       | Meaning                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `source-inventory.json`    | Sheet dimensions, visibility, formula counts, missing caches and error addresses                                                                                                     |
+| `statement-baseline.json`  | FY2026 statement cells, cached values, formulas and number formats                                                                                                                   |
+| `statement-baseline.xlsx`  | Formatted source P&L snapshot, same source cells through BY45; formulas replaced with their cached values, including zero, false and errors                                          |
+| `golden-source-rows.json`  | Pseudonymous bill/component/forecast fixtures with observed source rates and expected cached outputs; no clinical identities                                                         |
+| `reconciliation.json`      | Arithmetic exceptions, forecast references in Actual, FX observations, embedded numeric terms, source-row engine checks, invoice-date/source-report comparison and timing exceptions |
+| `migration-decisions.json` | User accounting decisions, retained on read-only reruns; not automatically applied to live masters or entries                                                                        |
+| `correction-proposal.json` | Explicit, unapproved bridge from cached FY totals to sums of monthly Actuals                                                                                                         |
+| `adjustment-review.json`   | Embedded numeric terms awaiting business reason and Finance approval; no automatic postings                                                                                          |
+| `REPORT.md`                | Private review summary, arithmetic differences and decisions needed before migration                                                                                                 |
 
 A cached value is a source observation, **not a recalculated or approved financial balance**. The source snapshot is a baseline representation, not a corrected statement and not the app's automated export. Its style/merges/column widths are retained for comparison; exact PDF/printed pagination still requires Finance review. Source print areas were not defined for the FY2026 statement, so the snapshot defines one explicitly. Feeder sheets and workbook log content are not copied into the snapshot.
 

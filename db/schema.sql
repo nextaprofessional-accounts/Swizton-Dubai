@@ -38,3 +38,19 @@ CREATE OR REPLACE FUNCTION prevent_audit_mutation() RETURNS trigger LANGUAGE plp
 DROP TRIGGER IF EXISTS audit_append_only ON audit_event;
 CREATE TRIGGER audit_append_only BEFORE UPDATE OR DELETE ON audit_event FOR EACH ROW EXECUTE FUNCTION prevent_audit_mutation();
 -- Deploy with a non-owner application role: grant SELECT/INSERT on audit_event, never UPDATE/DELETE/TRUNCATE.
+
+CREATE TABLE IF NOT EXISTS workflow_item (
+ id uuid PRIMARY KEY, organisation_id integer NOT NULL REFERENCES organisation(id),
+ kind text NOT NULL CHECK(kind IN ('adjustment_request','import_batch','settlement','budget','workbook_review','doctor_payment')),
+ payload jsonb NOT NULL, created_by uuid NOT NULL REFERENCES app_user(id),
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ CHECK(payload->>'id'=id::text), CHECK(payload->>'kind'=kind)
+);
+CREATE INDEX IF NOT EXISTS workflow_item_kind ON workflow_item(organisation_id,kind);
+
+CREATE UNIQUE INDEX IF NOT EXISTS app_user_email_casefold ON app_user(lower(email));
+
+ALTER TABLE workflow_item DROP CONSTRAINT IF EXISTS workflow_item_kind_check;
+ALTER TABLE workflow_item ADD CONSTRAINT workflow_item_kind_check CHECK(kind IN ('adjustment_request','import_batch','settlement','budget','workbook_review','doctor_payment'));
+
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS token_version integer NOT NULL DEFAULT 0;

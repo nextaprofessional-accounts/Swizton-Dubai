@@ -2,6 +2,8 @@
 
 Organisation: **NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO**. Calendar fiscal year Jan–Dec; functional currency AED; presentation INR lakh (100,000 INR).
 
+See [v0.2 advanced workflows and deployment guide](ADVANCED_APP.md) for the latest operational capabilities and APIs.
+
 ## Delivered scope and acceptance boundary
 
 The repository contains a working React/TypeScript interface, Node/Express API, PostgreSQL persistence, effective-dated financial engine, CSV/XLSX bill import, Excel/PDF exports, role-based logins, month control and append-only audit events. Demo mode is explicitly isolated in memory and resets on restart. Production mode never seeds transactions or rates.
@@ -73,28 +75,28 @@ erDiagram
 
 Each `financial_entry.payload` is a discriminated, validated record:
 
-| Kind | Principal fields | Logical master relationships |
-|---|---|---|
-| bill | Date, hospital, invoice, patient reference, IP/OP, procedure, doctor, cash/insurance, gross, consumables, pharmacy/lab, regime, component amounts, VAT/tax disclosure, visits | hospital, procedure, doctor, effective share rule |
-| estimate | Date, centre/hospital, patient, contact, procedure, referral, payment, approval, consumables fraction, visits | hospital, procedure, effective share rule |
-| receipt | Date, OP Consultation/Admin Cost Reimbursement, amount, patient, visits | effective source rule |
-| expense | Date, head, amount, currency, Actual/Accrual, paid state, remarks, optional covered dates | head → category; monthly FX |
-| wallet | Date, opening/topup/spend, AED amount, reference | Marketing Expense on spend only |
-| adjustment | Date, source P&L line, signed AED, mandatory reason | effective source rule when revenue |
+| Kind       | Principal fields                                                                                                                                                              | Logical master relationships                      |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| bill       | Date, hospital, invoice, patient reference, IP/OP, procedure, doctor, cash/insurance, gross, consumables, pharmacy/lab, regime, component amounts, VAT/tax disclosure, visits | hospital, procedure, doctor, effective share rule |
+| estimate   | Date, centre/hospital, patient, contact, procedure, referral, payment, approval, consumables fraction, visits                                                                 | hospital, procedure, effective share rule         |
+| receipt    | Date, OP Consultation/Admin Cost Reimbursement, amount, patient, visits                                                                                                       | effective source rule                             |
+| expense    | Date, head, amount, currency, Actual/Accrual, paid state, remarks, optional covered dates                                                                                     | head → category; monthly FX                       |
+| wallet     | Date, opening/topup/spend, AED amount, reference                                                                                                                              | Marketing Expense on spend only                   |
+| adjustment | Date, source P&L line, signed AED, mandatory reason                                                                                                                           | effective source rule when revenue                |
 
 JSONB is an intentional MVP storage choice for variable hospital components and configurable master collections. Zod and domain validation enforce logical relationships within the same serialised transaction; the database enforces IDs, kind/date/version agreement, invoice uniqueness and users. It is **not** a fully normalised accounting subledger or multi-tenant system. If direct SQL writers/integrations are introduced, normalise masters and postings and add database foreign keys first. Decimal values are strings in JSON, avoiding binary float storage; computation uses Decimal.js.
 
-All financial writes lock the organisation revision row. Optimistic revisions reject stale writes with HTTP 409. Master/input changes, close/reopen and audit insertion commit atomically. Inputs are append-only; corrections use reasoned source adjustments. Editing/deleting bills is intentionally absent. Audit snapshots currently copy the full dataset; production scale should move to entity-level deltas plus durable transaction IDs and encrypted retention.
+All financial writes lock the organisation revision row. Optimistic revisions reject stale writes with HTTP 409. Master/input changes, close/reopen and audit insertion commit atomically. Inputs are append-only; corrections use reasoned source adjustments. Editing/deleting bills is intentionally absent. Audit events retain changed records and posted entries rather than copying the full dataset. Event sequences and cursor pagination preserve access to older history. Backups and retention must be configured for deployment.
 
 ### Role matrix
 
-| Capability | Admin | Finance | Management |
-|---|---|---|---|
-| View dashboard, reports, sources, exports, budget scenarios | Yes | Yes | Yes |
-| Create entries/import bills/view audit | Yes | Yes | No |
-| Configure masters | Yes | No | No |
-| Close month | Yes | Yes | No |
-| Reopen month | Yes | No | No |
+| Capability                                                  | Admin | Finance | Management |
+| ----------------------------------------------------------- | ----- | ------- | ---------- |
+| View dashboard, reports, sources, exports, budget scenarios | Yes   | Yes     | Yes        |
+| Create entries/import bills/view audit                      | Yes   | Yes     | No         |
+| Configure masters                                           | Yes   | No      | No         |
+| Close month                                                 | Yes   | Yes     | No         |
+| Reopen month                                                | Yes   | No      | No         |
 
 Production users have bcrypt passwords and one-hour signed JWTs. Active state and role are rechecked against PostgreSQL on every request. Initial users are created by an operator CLI, not a public registration endpoint. Tokens are held in browser session storage; TLS, identity-provider SSO/MFA and secure HttpOnly sessions are recommended production extensions.
 
@@ -102,24 +104,24 @@ Production users have bcrypt passwords and one-hour signed JWTs. Active state an
 
 All `/api` routes except login and health require `Authorization: Bearer <token>`. JSON errors use `{error}`; stale revisions return 409, denied roles 403, expired/absent authentication 401, validation 400. Login is rate limited in-process (10 failures / 15 minutes per IP). Shared limits and reverse-proxy policy are deployment work.
 
-| Method | Endpoint | Request / result |
-|---|---|---|
-| GET | `/api/health` | Process/database readiness; demo flag |
-| POST | `/api/auth/login` | `{email,password}` → `{token,user,demo}` |
-| GET | `/api/me` | Current authorised user |
-| GET | `/api/data` | `{data:{masters,entries,closes},revision,demo}` |
-| GET | `/api/pnl/:year` | 12 Actual/Approx periods, Actual FY, working outlook, three prior-year comparatives, Combined |
-| POST | `/api/entries` | `{entry,reason,revision}`; create validated source record |
-| POST | `/api/import/bills` | `{format:'csv'|'xlsx',content,reason,revision}`; CSV text or base64 XLSX; atomic batch, 1–1000 rows, UI 5 MB cap |
-| PUT | `/api/masters` | `{masters,reason,revision}`; full collection replacement; Admin only |
-| POST | `/api/months/:month/close` | `{locked,reason,revision}`; close or Admin reopen |
-| GET | `/api/audit` | Latest 200 audit snapshots; Finance/Admin |
-| GET | `/api/analytics/:month` | Source-line variance, hospital/procedure ranking, case-cost allocation, indicative breakeven |
-| POST | `/api/budget` | `{month,fixedCost,items:[{hospital,procedure,cases,revenuePerCase}]}` → projected Swizton revenue/profit; no ledger mutation |
-| GET | `/api/export/:year/xlsx` | Monthly Approx/Actual × AED/INR lakh/%; FY, comparatives, combined, KPI/mix rows |
-| GET | `/api/export/:year/pdf` | A3 monthly report pages and annual/comparative summary |
+| Method | Endpoint                   | Request / result                                                                                                             |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/health`              | Process/database readiness; demo flag                                                                                        |
+| POST   | `/api/auth/login`          | `{email,password}` → `{token,user,demo}`                                                                                     |
+| GET    | `/api/me`                  | Current authorised user                                                                                                      |
+| GET    | `/api/data`                | `{data:{masters,entries,closes},revision,demo}`                                                                              |
+| GET    | `/api/pnl/:year`           | 12 Actual/Approx periods, Actual FY, working outlook, three prior-year comparatives, Combined                                |
+| POST   | `/api/entries`             | `{entry,reason,revision}`; create validated source record                                                                    |
+| POST   | `/api/import/bills`        | `{format:'csv'                                                                                                               | 'xlsx',content,reason,revision}`; CSV text or base64 XLSX; atomic batch, 1–1000 rows, UI 5 MB cap |
+| PUT    | `/api/masters`             | `{masters,reason,revision}`; full collection replacement; Admin only                                                         |
+| POST   | `/api/months/:month/close` | `{locked,reason,revision}`; close or Admin reopen                                                                            |
+| GET    | `/api/audit`               | Latest 200 audit snapshots; Finance/Admin                                                                                    |
+| GET    | `/api/analytics/:month`    | Source-line variance, hospital/procedure ranking, case-cost allocation, indicative breakeven                                 |
+| POST   | `/api/budget`              | `{month,fixedCost,items:[{hospital,procedure,cases,revenuePerCase}]}` → projected Swizton revenue/profit; no ledger mutation |
+| GET    | `/api/export/:year/xlsx`   | Monthly Approx/Actual × AED/INR lakh/%; FY, comparatives, combined, KPI/mix rows                                             |
+| GET    | `/api/export/:year/pdf`    | A3 monthly report pages and annual/comparative summary                                                                       |
 
-Drilldown uses `rows[line].ids` from the report and source records returned by `/api/data`; values are always calculated on the server. The MVP loads all organisational data into memory per request; pagination and a dedicated drilldown endpoint are required at production volumes.
+Drilldown uses a dedicated server endpoint to calculate the recognised source contribution to the selected row/period, followed by a searchable, paginated source table. The current calculation repository still loads organisational data into memory; high-volume database paging is a separate scale requirement.
 
 ## 3. Screen wireframes
 
@@ -170,7 +172,7 @@ Expense ledger         Monthly amortisation | Outstanding | Source currency
 Marketing wallet       Opening | Additions | Spend | Closing
 ```
 
-Other screens: Masters displays collection tabs and a validated JSON editor (Admin); Month close presents status, impact and required reason; Audit offers before/after snapshots; Analytics presents the hospital/procedure ranking and variances; Budget planner accepts multiple procedure-count assumptions.
+Other screens: Masters displays guided collection and rate-matrix forms (Admin); Month close presents status, impact and required reason; Audit offers before/after snapshots; Analytics presents the hospital/procedure ranking and variances; Budget planner accepts multiple procedure-count assumptions.
 
 ## 4. Calculation contract and tests
 
@@ -189,9 +191,9 @@ The engine is [server/engine.ts](../server/engine.ts), domain validation [server
 9. **Wallet**: one initial opening per version; prior inflows less spend roll forward, monthly topups increase wallet balance, monthly spend alone enters marketing expense. Negative balances are shown transparently and require Finance reconciliation; this is not a bank-payment authorisation service.
 10. **Totals**: FY Actual is always Actual only (section 2 of request). **Working outlook** uses Approx for open months and Actual for locked months (section 4). Closing never adds Actual on top of Approx. Historical totals are supplied in both currencies and ratios use each year's Swizton AED base. Missing comparative cells and incomplete Combined values remain missing, not invented zero balances.
 11. **KPIs**: IP bills are cases, OP bills/receipts contribute visits but not cases. Bills/receipts support a separate recognitionMonth for revenue; case/visit KPIs retain their original date, while locks protect both months. A single IP bill corresponds to one procedure case. Explicit visits are additive; importers must avoid counting the same visit in both bill and receipt. No patient deduplication or encounter linking is implemented. Achievement is cases ÷ target; zero target and zero Swizton percentage denominator yield null.
-12. **Manual adjustments** may alter a source revenue line or expense category only. Source revenue adjustments pass through the applicable shares. Derived totals cannot be typed over. KPI adjustments and direct postings to individual doctor shares need a separate approved design.
-13. **Locks** cover both forecast and actual entries touching the month, including annual prepaids. All masters are frozen if any month is locked. Admin may reopen with reason. For the MVP, adding a future procedure or FX year also requires reopening; period-versioned snapshots will remove that operational constraint later.
-14. **Profitability** currently allocates all monthly costs evenly per IP case and discloses this basis. A true fixed/variable-cost breakeven and procedure direct costs need explicit cost classifications. The implemented indicative breakeven uses total expense ÷ average Swizton revenue per case. Ranking is contribution after assumed allocation, not a verified clinical costing model.
+12. **Manual adjustments** require independent Admin approval. They may alter a source revenue line/expense category or explicitly adjust the eligible-revenue basis for Chinmay using effective source rates without changing Swizton revenue. Source revenue adjustments pass through the applicable shares. Derived totals cannot be typed over. KPI adjustments and direct postings to individual doctor shares need a separate approved design.
+13. **Locks** cover both forecast and actual entries touching the month, including annual prepaids. Future masters may be added if locked financial values, volume KPIs and source shares remain identical. Changes affecting locked results or over-settling an existing obligation are rejected. Admin may reopen with a reason when a financial restatement is required.
+14. **Profitability** currently allocates all monthly costs evenly per IP case and discloses this basis. The advanced release supports explicit expense-head/wallet cost classification and case-linked ledger costs. Fixed-cost breakeven is unavailable until all relevant costs are classified and contribution is positive. The shared-cost allocation basis remains disclosed and is not a clinical costing certification.
 
 ### Validation evidence
 
@@ -218,12 +220,12 @@ Preserve an untouched source workbook; export all sheets with formulas and cache
 
 ## 6. Phased roadmap
 
-| Phase | Delivered baseline / next work | Exit criterion |
-|---|---|---|
-| MVP: inputs + P&L | Delivered application, engine, effective-date masters, role login, bills/estimates/receipts/expenses/wallet inputs, prepaids, locks/audit, bill import, XLSX/PDF exports. Remaining: workbook golden fixtures, payout schedule ambiguity, exact print layout, full feeder migration, per-head reporting and finer master forms. | Every monthly source and cell reconciled with signed workbook; migration approved; named-user PostgreSQL deployment passes recovery and permissions checks. |
-| Analytics | Delivered variance, contribution ranking, hospital×procedure matrix and multi-procedure budget prototype. Next: fixed/variable cost classification, case-linked direct costs, cash/receivable views, complete YoY history and saved budget revisions. | Reconciled analytical dimensions and Finance-approved cost allocation/breakeven model. |
-| Forecasting | Delivered simple case-count scenario calculator and Approx inputs. Next: conversion probabilities, lead pipeline, capacity/staff planning, scenario versions, forecast accuracy and rolling outlook snapshots. | Backtested assumptions with approved forecast ownership and monthly accuracy review. |
-| Deployment hardening | SSO/MFA, TLS termination, secret management, audited account lifecycle, granular patient permissions, input/import resource isolation, shared rate limits, monitoring, backups, restore drills, dependency patching, independent access/security review. | Hosting, data retention and healthcare privacy controls approved; no open release blockers. |
+| Phase                | Delivered baseline / next work                                                                                                                                                                                                                                                                                                                                                        | Exit criterion                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MVP: inputs + P&L    | Delivered application, engine, effective-date masters, role login, bills/estimates/receipts/expenses/wallet inputs, prepaids, locks/audit, bill import, XLSX/PDF exports. Advanced forms, professional-fee payments, approval/import workflows and private golden checks are delivered. Remaining: Finance sign-off, exact automated print layout and full approved feeder migration. | Every monthly source and cell reconciled with signed workbook; migration approved; named-user PostgreSQL deployment passes recovery and permissions checks. |
+| Analytics            | Delivered variance, contribution ranking, hospital×procedure matrix and multi-procedure budget prototype. Next: fixed/variable cost classification, case-linked direct costs, cash/receivable views, complete YoY history and saved budget revisions.                                                                                                                                 | Reconciled analytical dimensions and Finance-approved cost allocation/breakeven model.                                                                      |
+| Forecasting          | Delivered simple case-count scenario calculator and Approx inputs. Next: conversion probabilities, lead pipeline, capacity/staff planning, forecast accuracy and rolling outlook snapshots.                                                                                                                                                                                           | Backtested assumptions with approved forecast ownership and monthly accuracy review.                                                                        |
+| Deployment hardening | SSO/MFA, TLS termination, secret management, audited account lifecycle, granular patient permissions, input/import resource isolation, shared rate limits, monitoring, backups, restore drills, dependency patching, independent access/security review.                                                                                                                              | Hosting, data retention and healthcare privacy controls approved; no open release blockers.                                                                 |
 
 VAT and UAE Corporate Tax fields are available as bill disclosures. Tax applicability, input-VAT recovery, statutory calculation and filing are not automated by this MVP; tax/accounting review must define the required postings and rates. No live patient data should enter demo mode.
 
