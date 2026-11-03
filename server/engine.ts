@@ -1,10 +1,11 @@
+import {recognitionMonthOf} from './period.ts';
 import {Decimal as D} from 'decimal.js';
 import {categories,pnlLines,type Dataset,type Entry,type Masters} from './model.ts';
 D.set({precision:32,rounding:D.ROUND_HALF_UP});
 export const monthOf=(date:string)=>date.slice(0,7);
 const monthIndex=(m:string)=>Number(m.slice(0,4))*12+Number(m.slice(5,7))-1;
 export function affectedMonths(e:Entry):string[]{
- if(e.kind!=='expense'||!e.coverageStart||!e.coverageEnd)return [monthOf(e.date)];
+ if(e.kind!=='expense'||!e.coverageStart||!e.coverageEnd)return [...new Set([recognitionMonthOf(e),monthOf(e.date)])];
  const start=monthIndex(monthOf(e.coverageStart)),end=monthIndex(monthOf(e.coverageEnd));
  if(end<start||end-start>120)throw Error('Coverage must be ordered and no longer than 121 months');
  return Array.from({length:end-start+1},(_,i)=>`${Math.floor((start+i)/12)}-${String((start+i)%12+1).padStart(2,'0')}`);
@@ -58,7 +59,10 @@ export function calculateMonth(ds:Dataset,month:string,version:'Actual'|'Approx'
   if(r.chinmayEligible)add('Dr. Chinmay – Professional Fee',a.times(r.doctorPool).times(r.chinmay),id);
  };
  for(const e of ds.entries.filter(e=>e.version===version)){
-  const inMonth=monthOf(e.date)===month;
+  const inMonth=recognitionMonthOf(e)===month;
+  // Revenue follows recognition; cases/visits stay with the original occurrence date.
+  if(e.kind==='bill'&&monthOf(e.date)===month){visits+=e.visits;if(e.billType==='IP'){cases++;mix[e.procedure]=(mix[e.procedure]??0)+1}}
+  if(e.kind==='receipt'&&monthOf(e.date)===month)visits+=e.visits;
   if(e.kind==='expense'){
    const months=affectedMonths(e);if(!months.includes(month))continue;
    const head=ds.masters.expenseHeads.find(h=>h.name===e.head);if(!head)throw Error(`Unknown expense head ${e.head}`);
@@ -70,8 +74,7 @@ export function calculateMonth(ds:Dataset,month:string,version:'Actual'|'Approx'
   if(!inMonth)continue;
   if(e.kind==='bill'){
    if(version!=='Actual')throw Error('Bills must be Actual; use estimates for Approx');
-   allocate(e.hospital,e.date,billShare(e,ds.masters),e.id);visits+=e.visits;
-   if(e.billType==='IP'){cases++;mix[e.procedure]=(mix[e.procedure]??0)+1}
+   allocate(e.hospital,e.date,billShare(e,ds.masters),e.id);
   }
   if(e.kind==='estimate'){
    if(version!=='Approx')throw Error('Estimates must be Approx');
@@ -80,7 +83,7 @@ export function calculateMonth(ds:Dataset,month:string,version:'Actual'|'Approx'
    const r=ruleAt(ds.masters,e.hospital,e.date);
    allocate(e.hospital,e.date,net.times(r.forecastShare??r.share),e.id);cases++;visits+=e.visits;mix[e.procedure]=(mix[e.procedure]??0)+1;
   }
-  if(e.kind==='receipt'){allocate(e.source,e.date,new D(e.amount),e.id);visits+=e.visits}
+  if(e.kind==='receipt'){allocate(e.source,e.date,new D(e.amount),e.id)}
   if(e.kind==='wallet'&&e.action==='spend')add('Marketing Expense',new D(e.amount),e.id);
   if(e.kind==='adjustment'){
    if(![...ds.masters.hospitals.map(h=>h.id),'Admin Cost Reimbursement','OP Consultation',...categories].includes(e.line))throw Error('Adjust a source revenue or expense category, never a derived total');

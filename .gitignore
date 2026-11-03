@@ -14,3 +14,4 @@ statement-baseline.json
 source-inventory.json
 correction-proposal.json
 adjustment-review.json
+migration-decisions.json

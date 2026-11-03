@@ -1,5 +1,7 @@
+import {recognitionMonthOf} from './period.ts';
 import {affectedMonths,billShare,calculateYear,ruleAt,validateMasters} from './engine.ts';
 import {entrySchema,masterSchema,type Dataset,type Entry} from './model.ts';
+const financialMonths=(e:Entry)=>(e.kind==='bill'||e.kind==='receipt')?[recognitionMonthOf(e)]:affectedMonths(e);
 export function validateDataset(d:Dataset){
  masterSchema.parse(d.masters);validateMasters(d.masters);
  const invoices=new Set<string>();const ids=new Set<string>();
@@ -16,9 +18,9 @@ export function validateDataset(d:Dataset){
   }
   if(e.kind==='expense'&&Boolean(e.coverageStart)!==Boolean(e.coverageEnd))throw Error('Both coverage dates are required');
   if(e.kind==='wallet'&&e.action==='opening'&&d.entries.some(x=>x.kind==='wallet'&&x.action==='opening'&&x.version===e.version&&x.id!==e.id))throw Error('Only one initial wallet balance per version is permitted');
-  for(const m of affectedMonths(e))if(!d.masters.fx.some(f=>f.month===m))throw Error(`Missing FX for ${m}`);
+  for(const m of financialMonths(e))if(!d.masters.fx.some(f=>f.month===m))throw Error(`Missing FX for ${m}`);
  }
- const years=new Set(d.entries.flatMap(e=>affectedMonths(e).map(m=>Number(m.slice(0,4)))));
+ const years=new Set(d.entries.flatMap(e=>financialMonths(e).map(m=>Number(m.slice(0,4)))));
  for(const y of years)calculateYear(d,y);
 }
 export function assertUnlocked(d:Dataset,e:Entry){

@@ -18,6 +18,7 @@ The output directory **must be outside the repository**. The tool rejects a dire
 | `statement-baseline.xlsx` | Formatted source P&L snapshot, same source cells through BY45; formulas replaced with their cached values, including zero, false and errors |
 | `golden-source-rows.json` | Pseudonymous bill/component/forecast fixtures with observed source rates and expected cached outputs; no clinical identities |
 | `reconciliation.json` | Arithmetic exceptions, forecast references in Actual, FX observations, embedded numeric terms, source-row engine checks, invoice-date/source-report comparison and timing exceptions |
+| `migration-decisions.json` | User accounting decisions, retained on read-only reruns; not automatically applied to live masters or entries |
 | `correction-proposal.json` | Explicit, unapproved bridge from cached FY totals to sums of monthly Actuals |
 | `adjustment-review.json` | Embedded numeric terms awaiting business reason and Finance approval; no automatic postings |
 | `REPORT.md` | Private review summary, arithmetic differences and decisions needed before migration |
@@ -65,3 +66,9 @@ Bills can carry optional `adminAmount` and `refundableAmount`, alongside `deduct
 ## Current limits
 
 The CLI checks the existing known workbook layout rather than arbitrary spreadsheets. Its source-row checks span historical and current-year data; a matched check is not necessarily a FY2026 case. It verifies calculable CSH/IMH final shares, a provisional Al Garhoud component model and September forecast arithmetic. It does not yet migrate the entire expense ledger, wallet, all forecast months or encounter counts. Date-based source aggregation is only a comparison of calculable bills; it does not resolve recognition differences, missing invoices or signed adjustments. No historical balances are posted to production or demo mode by this command. Unresolved source figures must not be turned into unexplained balancing entries.
+
+## Recognition dates
+
+Bills and receipts accept an optional `recognitionMonth` (`YYYY-MM`), defaulting to the original `date` month. The original date is never overwritten. Revenue and recognition-period FX use the recognition month; the effective share rule is selected by the original invoice/receipt date. Case and visit KPIs retain the original occurrence-date period; they must not turn prior-year receipts into new current-year cases. Locks protect both the original occurrence month and revenue recognition month because either may affect reported values. The historical share rule must cover the original invoice date; FX is required for the recognition period. Viewing a historical-year report separately requires that year's reporting FX configuration.
+
+The source ledger shows both dates and filters by revenue recognition period; recognised-bill profitability counts can therefore differ from occurrence-date case KPIs. Partial settlements still require a reviewed allocation workflow; this field does not permit posting the same invoice in full multiple times.
