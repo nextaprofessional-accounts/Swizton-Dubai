@@ -1,0 +1,3 @@
+date,hospital,patient,procedure,doctor,billType,payment,invoice,gross,consumables,pharmacyLab,regime,components,visits,vat,tax
+2026-01-10,CSH,SAMPLE PATIENT REFERENCE,RFA,Dr. Tahsin,IP,Insurance,SAMPLE-CSH-001,10000,1000,1000,Standard,{},1,0,0
+2026-01-11,Al Garhoud,SAMPLE PATIENT REFERENCE,VenaSeal,Dr. Tahsin,IP,Cash,SAMPLE-AG-001,1500,0,0,HMS,"{""Consultation"":""1000"",""Surgeon Fee"":""500""}",1,0,0
