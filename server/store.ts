@@ -65,6 +65,9 @@ function changeSet(before: Dataset, after: Dataset, entity: string, action: stri
     after: {
       operation: after.operations?.find((o) => o.id === entity) ?? null,
       entries: newEntries,
+      relatedOperations: (after.operations ?? []).filter(
+        (o) => o.id !== entity && !before.operations?.some((old) => old.id === o.id),
+      ),
     },
   };
 }

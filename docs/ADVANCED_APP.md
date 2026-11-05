@@ -148,3 +148,7 @@ The compiler rewrites TypeScript import extensions, copies the schema to `build/
 - The known moderate advisories in ExcelJS's archive dependency chain remain a release-review item. Archive limits and the child-process boundary do not constitute a vendor patch or an independent security certification.
 
 This release implements the application workflows. It does **not** claim the legacy statement is reconciled or that a live production service has been deployed. The following are still external prerequisites: approved RBI rates, Finance explanations/sign-off for source exceptions and contract terms, approved comparative balances, hosting/TLS/secrets, and tested database/private-file backup and recovery. VAT and Corporate Tax amounts remain disclosures; tax applicability, statutory calculation and filing need the accountant-approved policy. Bank execution, remittance reconciliation, refunds/reversals, SSO/MFA, large-volume database pagination and multi-tenant accounting are distinct extensions rather than silently simulated capabilities.
+
+## Forecasting phase (v0.3)
+
+The next phase adds a procedure pipeline, rolling forecasts, immutable version snapshots, forecast accuracy and dated cash plans. See [Forecasting and cash planning](FORECASTING.md) for formulas, APIs, workflow diagrams, upgrade steps and limits. Existing P&L, workbook preservation and approval rules remain in force.

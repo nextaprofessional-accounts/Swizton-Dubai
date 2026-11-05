@@ -587,3 +587,160 @@ test('budget comparison uses the saved projection snapshot', async () => {
   assert.deepEqual(result.budget, scenario.projection);
   assert.equal(result.version, 1);
 });
+
+test('planning API preserves snapshots, rejects stale lead edits and enforces read-only roles', async () => {
+  const initial = await state(),
+    entryCount = initial.data.entries.length;
+  const lead = {
+    patientReference: 'Synthetic API prospect',
+    contact: '',
+    hospital: 'CSH',
+    procedure: 'RFA',
+    expectedDate: '2026-08-20',
+    stage: 'Qualified',
+    probability: '0.5',
+    approvalAmount: '10000',
+    consumablesRate: '0.2',
+    collectionLagDays: 15,
+    owner: '',
+    source: 'Synthetic API referral',
+    reason: 'Verify audited lead lifecycle',
+  };
+  assert.equal(
+    (await request('/leads', management, { lead, revision: initial.revision })).status,
+    403,
+  );
+  const created = await request('/leads', finance, { lead, revision: initial.revision });
+  assert.equal(created.status, 201, await created.clone().text());
+  const { id } = await created.json();
+  let s = await state();
+  assert.equal(
+    (
+      await request(
+        `/leads/${id}`,
+        finance,
+        {
+          lead,
+          revision: s.revision,
+          expectedUpdatedAt: '2000-01-01T00:00:00.000Z',
+        },
+        'PUT',
+      )
+    ).status,
+    409,
+  );
+  const stored = s.data.operations.find((o: any) => o.id === id);
+  const updated = await request(
+    `/leads/${id}`,
+    finance,
+    {
+      lead: { ...lead, probability: '0.6' },
+      revision: s.revision,
+      expectedUpdatedAt: stored.updatedAt,
+    },
+    'PUT',
+  );
+  assert.equal(updated.status, 200, await updated.clone().text());
+  const params = {
+    name: 'API frozen forecast',
+    asOfDate: '2026-08-01',
+    months: 1,
+    probabilityMultiplier: '1',
+    revenueMultiplier: '1',
+    monthly: [{ month: '2026-08', fixedCost: '1000', variableCostPerCase: '50', capacity: 1 }],
+    reason: 'Verify immutable forecast snapshot',
+  };
+  assert.equal((await request('/forecasts/preview', management, params)).status, 200);
+  s = await state();
+  assert.equal(
+    (await request('/forecasts', management, { params, revision: s.revision })).status,
+    403,
+  );
+  const capture = await request('/forecasts', finance, { params, revision: s.revision });
+  assert.equal(capture.status, 201, await capture.clone().text());
+  const snapshotId = (await capture.json()).id;
+  s = await state();
+  const frozen = s.data.operations.find((o: any) => o.id === snapshotId);
+  assert.equal(frozen.result.leads.find((o: any) => o.leadId === id).probabilityUsed, '0.600000');
+  const newer = s.data.operations.find((o: any) => o.id === id);
+  assert.equal(
+    (
+      await request(
+        `/leads/${id}`,
+        finance,
+        {
+          lead: { ...lead, probability: '0.1' },
+          revision: s.revision,
+          expectedUpdatedAt: newer.updatedAt,
+        },
+        'PUT',
+      )
+    ).status,
+    200,
+  );
+  s = await state();
+  assert.deepEqual(
+    s.data.operations.find((o: any) => o.id === snapshotId),
+    frozen,
+  );
+  assert.equal(s.data.entries.length, entryCount);
+  assert.equal((await request(`/forecasts/${snapshotId}/accuracy`, management)).status, 200);
+  const download = await request(`/forecasts/${snapshotId}/export`, management);
+  assert.equal(download.status, 200);
+  assert.equal(
+    Buffer.from(await download.arrayBuffer())
+      .subarray(0, 2)
+      .toString(),
+    'PK',
+  );
+});
+
+test('cash realization is atomic, audited and does not post a second expense or revenue', async () => {
+  let s = await state();
+  const entries = s.data.entries;
+  const plan = {
+    date: '2026-12-10',
+    direction: 'In',
+    amount: '250',
+    target: 'other',
+    description: 'Synthetic capital contribution',
+    reason: 'Test traceable capital plan',
+  };
+  assert.equal(
+    (await request('/cash/plans', management, { plan, revision: s.revision })).status,
+    403,
+  );
+  const created = await request('/cash/plans', finance, { plan, revision: s.revision });
+  assert.equal(created.status, 201, await created.clone().text());
+  const { id } = await created.json();
+  s = await state();
+  const realize = {
+    date: '2026-12-10',
+    amount: '250',
+    reference: 'API-CASH-CAPITAL',
+    reason: 'Confirm synthetic capital deposit',
+    revision: s.revision,
+  };
+  const response = await request(`/cash/plans/${id}/realize`, finance, realize);
+  assert.equal(response.status, 201, await response.clone().text());
+  s = await state();
+  assert.deepEqual(s.data.entries, entries);
+  assert.equal(s.data.operations.find((o: any) => o.id === id).status, 'Realized');
+  assert.equal(
+    (await request(`/cash/plans/${id}/realize`, finance, { ...realize, revision: s.revision }))
+      .status,
+    400,
+  );
+  const cash = await request('/cash/forecast', management, {
+    asOfDate: '2026-12-01',
+    months: 1,
+    opening: '100',
+    pipeline: false,
+    doctorLagDays: 0,
+  });
+  assert.equal(cash.status, 200);
+  assert.ok((await cash.json()).events.some((e: any) => e.reference === 'API-CASH-CAPITAL'));
+  const audit = JSON.stringify(await (await request('/audit', admin)).json());
+  assert.match(audit, /relatedOperations/);
+  assert.match(audit, /API-CASH-CAPITAL/);
+});

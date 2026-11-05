@@ -1,3 +1,4 @@
+import { registerPlanningRoutes } from './planning-routes.ts';
 import express from 'express';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
@@ -120,6 +121,7 @@ const roles =
 const reasonSchema = z.string().min(8).max(1000);
 const revisionSchema = z.number().int().nonnegative();
 registerAdvancedRoutes(app);
+registerPlanningRoutes(app);
 app.get('/api/accounts', roles('Admin'), async (_q, r) => r.json(await listAccounts()));
 app.post('/api/accounts', roles('Admin'), async (q, r) => {
   const b = z

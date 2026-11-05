@@ -1,3 +1,4 @@
+import type { Lead, ForecastSnapshot, CashPlan, CashMovement } from './planning-model.ts';
 import type { Entry } from './model.ts';
 interface Base {
   id: string;
@@ -89,4 +90,13 @@ export type DoctorPayment = Base & {
   reason: string;
 };
 export type WorkflowItem =
-  DoctorPayment | AdjustmentRequest | ImportBatch | Settlement | BudgetScenario | WorkbookReview;
+  | Lead
+  | ForecastSnapshot
+  | CashPlan
+  | CashMovement
+  | DoctorPayment
+  | AdjustmentRequest
+  | ImportBatch
+  | Settlement
+  | BudgetScenario
+  | WorkbookReview;

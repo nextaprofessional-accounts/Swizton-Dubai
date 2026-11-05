@@ -110,11 +110,69 @@ try {
   assert.ok(
     next.data.operations.some((o: any) => o.kind === 'workbook_review' && o.id === result.id),
   );
+  async function write(path: string, body: object) {
+    const current = await (await request('/data')).json();
+    const response = await request(path, { ...body, revision: current.revision });
+    assert.equal(response.status, 201, await response.clone().text());
+    return response.json();
+  }
+  await write('/leads', {
+    lead: {
+      patientReference: 'Synthetic packaged prospect',
+      contact: '',
+      hospital: 'CSH',
+      procedure: 'RFA',
+      expectedDate: '2026-06-20',
+      stage: 'Qualified',
+      probability: '0.5',
+      approvalAmount: '10000',
+      consumablesRate: '0.2',
+      collectionLagDays: 15,
+      owner: '',
+      source: 'Packaged smoke',
+      reason: 'Verify packaged planning persistence',
+    },
+  });
+  const snapshot = await write('/forecasts', {
+    params: {
+      name: 'Packaged forecast',
+      asOfDate: '2026-06-01',
+      months: 1,
+      probabilityMultiplier: '1',
+      revenueMultiplier: '1',
+      monthly: [{ month: '2026-06', fixedCost: '1000', variableCostPerCase: '50', capacity: 1 }],
+      reason: 'Verify frozen forecast persistence',
+    },
+  });
+  assert.equal((await request(`/forecasts/${snapshot.id}/export`)).status, 200);
+  const plan = await write('/cash/plans', {
+    plan: {
+      date: '2026-06-02',
+      direction: 'In',
+      amount: '100',
+      target: 'other',
+      description: 'Synthetic capital',
+      reason: 'Verify packaged cash workflow',
+    },
+  });
+  await write(`/cash/plans/${plan.id}/realize`, {
+    date: '2026-06-02',
+    amount: '100',
+    reference: 'PACKAGED-CAPITAL',
+    reason: 'Confirm synthetic bank movement',
+  });
+  const final = await (await request('/data')).json();
+  assert.equal(final.data.entries.length, 0, 'Planning must not post P&L entries');
+  for (const kind of ['lead', 'forecast_snapshot', 'cash_plan', 'cash_movement'])
+    assert.ok(
+      final.data.operations.some((o: any) => o.kind === kind),
+      kind,
+    );
   const page = await fetch(origin);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /type="module"/);
   console.log(
-    'PASS packaged JavaScript server, PostgreSQL authentication, compiled private-workbook processor, protected baseline download and unchanged ledger',
+    'PASS packaged server, PostgreSQL, private workbook baseline, persistent lead/forecast/cash workflows, protected exports and unchanged ledger',
   );
 } finally {
   if (child && child.exitCode === null) {

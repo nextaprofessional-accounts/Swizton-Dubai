@@ -1127,3 +1127,103 @@ tfoot th {
     margin-top: 10px;
   }
 }
+.pipeline-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(175px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding: 10px 0 20px;
+}
+.pipeline-column {
+  border: 1px solid #e2e9dc;
+  background: #f6f8f2;
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 130px;
+}
+.pipeline-column h4 {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #57745b;
+}
+.pipeline-column h4 span {
+  background: #e3ecdf;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+}
+.lead-card {
+  padding: 13px;
+  background: white;
+  border: 1px solid #e1e7dc;
+  border-radius: 6px;
+  margin: 12px 0;
+  white-space: normal;
+}
+.lead-card b {
+  font-size: 12px;
+}
+.lead-card p {
+  font-size: 11px;
+  margin: 8px 0;
+}
+.lead-card small {
+  font-size: 9px;
+  line-height: 1.7;
+}
+.lead-card summary {
+  font-size: 10px;
+  margin: 8px 0;
+}
+.forecast-trend {
+  display: flex;
+  gap: 20px;
+  flex-direction: column;
+  margin: 28px 0;
+}
+.forecast-trend > div {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  font-size: 11px;
+}
+.forecast-trend span {
+  min-width: 70px;
+  color: #869780;
+}
+.forecast-trend > div > div {
+  flex: 1;
+  background: #f0f4eb;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.forecast-trend i {
+  height: 100%;
+  display: block;
+  background: #498269;
+  border-radius: 3px;
+}
+.forecast-trend i.loss {
+  background: #bc8879;
+}
+.forecast-trend b {
+  width: 110px;
+  text-align: right;
+  font-size: 11px;
+}
+.pipeline-board .text-button {
+  padding-left: 0;
+}
+@media (max-width: 700px) {
+  .pipeline-board {
+    grid-template-columns: repeat(6, 190px);
+  }
+  .forecast-trend > div {
+    gap: 8px;
+  }
+  .forecast-trend b {
+    width: 85px;
+  }
+}

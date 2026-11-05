@@ -1,3 +1,4 @@
+import { Planning } from './Planning';
 import React, { useEffect, useState, createContext, useContext } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Dataset, Entry, Masters } from '../../server/model';
@@ -122,7 +123,14 @@ function App() {
     }
   }
   const writable = user?.role !== 'Management';
-  const independent = ['Operations', 'Receivables', 'Workbook review', 'Masters', 'User access'];
+  const independent = [
+    'Planning',
+    'Operations',
+    'Receivables',
+    'Workbook review',
+    'Masters',
+    'User access',
+  ];
   if (!user)
     return (
       <div className="login">
@@ -207,6 +215,7 @@ function App() {
               'Marketing wallet',
               'Analytics',
               'Budget planner',
+              'Planning',
               'Operations',
               'Receivables',
               'Workbook review',
@@ -231,7 +240,7 @@ function App() {
                   }}
                 >
                   <span aria-hidden="true">
-                    {['◫', '▤', '↗', '▧', '◉', '▥', '◇', '↔', '⌁', '▣', '⚙', '▣', '♙', '≡'][i]}
+                    {['◫', '▤', '↗', '▧', '◉', '▥', '◇', '◷', '↔', '⌁', '▣', '⚙', '▣', '♙', '≡'][i]}
                   </span>
                   {p}
                 </button>
@@ -328,6 +337,9 @@ function App() {
             <div className="loading" role="status">
               Updating workspace…
             </div>
+          )}
+          {ds && page === 'Planning' && (
+            <Planning ds={ds} revision={revision} user={user} refresh={load} />
           )}
           {ds && page === 'Operations' && (
             <Operations

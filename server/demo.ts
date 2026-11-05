@@ -1,3 +1,4 @@
+import { businessDate, addDays } from './planning-calendar.ts';
 import { randomUUID } from 'node:crypto';
 import type { Dataset, Masters } from './model.ts';
 const hospitals = [
@@ -240,5 +241,27 @@ export function demoDataset(): Dataset {
       },
     },
   ];
+  const cutoff = businessDate();
+  for (const [i, hospital] of ['CSH', 'IMH'].entries())
+    ds.operations!.push({
+      id: randomUUID(),
+      kind: 'lead',
+      createdBy: '00000000-0000-4000-8000-000000000002',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      patientReference: `Sample prospect ${i + 1}`,
+      contact: '',
+      hospital,
+      procedure: masters.procedures[i],
+      expectedDate: addDays(cutoff, 10 + i * 5),
+      stage: i ? 'Approved' : 'Qualified',
+      probability: i ? '0.8' : '0.5',
+      approvalAmount: i ? '15000' : '12000',
+      consumablesRate: '0.25',
+      collectionLagDays: 15,
+      owner: 'Sample Finance',
+      source: 'Illustrative pipeline only',
+      reason: 'Synthetic planning workspace',
+    });
   return ds;
 }

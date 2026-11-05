@@ -2,7 +2,7 @@
 
 P&L and revenue-share management for **NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO**. React + TypeScript, Node/Express, PostgreSQL 16 and Decimal.js.
 
-**Advanced finance operations application (v0.2) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
+**Advanced finance operations and forecasting application (v0.3) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
 
 ## Quick start: sample workspace
 
@@ -48,8 +48,13 @@ With the demo app running, `npm run test:browser` executes the Chromium UI smoke
 
 The default suite executes engine, API and workflow tests; database-only and private-source tests are explicitly skipped when their optional prerequisites are absent. The PostgreSQL suite uses a temporary schema. Add `SWIZTON_GOLDEN_FIXTURE` pointing outside the checkout to include private source-row checks. Synthetic expectations are mathematically checked; none is represented as a recovered Excel result.
 
+## Upgrading an extracted ZIP
+
+Stop the running server, extract the latest ZIP into a separate folder, and preserve your environment settings and database. Run `npm ci` and `npm run build` in the new folder. PostgreSQL users must run `npm run db:migrate` against their existing database before starting the new server; the migration adds planning workflow types without reseeding approved masters. Demo mode resets sample data on restart.
+
 ## Deliverables
 
+- [Rolling forecasts, lead pipeline, accuracy and cash planning](docs/FORECASTING.md)
 - [Advanced workflows, additional APIs, schema extension and deployment guide](docs/ADVANCED_APP.md)
 - [Architecture, ERD, API list, screen wireframes, financial assumptions, migration plan and phased roadmap](docs/ARCHITECTURE.md)
 - [Executable PostgreSQL schema](db/schema.sql)
@@ -64,6 +69,6 @@ FY totals are **Actual only**. A separate working outlook uses Approx until a mo
 
 Workbook inspection confirmed the forecast chain (gross approval → net procedure charge → doctor payout → Swizton share). Recorded bill deductions now support reasoned overrides. Deduction bases, refundable treatment, recognition timing, source errors, FX approvals and exact automated print layout remain to be settled. XLSX has Jan–Dec Approx/Actual blocks with three currencies/ratio columns; PDF currently uses readable monthly pages. Guided masters, classified breakeven, case-linked costs, hospital collections, professional-fee payments, adjustment approvals, saved budget snapshots and workbook review are implemented. Statutory VAT/Corporate Tax calculation, bank execution/reversals, SSO/MFA and production hosting/backup operations remain outside this release. See the architecture document for the complete acceptance boundary.
 
-## Upgrading to v0.2
+## Schema and private data (v0.3)
 
-Run the schema migration before starting the new server. It adds persistent workflow items for imports, approvals, collections, doctor payments, budgets and workbook reviews. Master changes no longer require reopening every month: only changes affecting locked results are rejected. Manual adjustments now go through independent Admin approval; use Operations to review them. Set `PRIVATE_DATA_DIR` outside the checkout before using real workbook review in PostgreSQL mode. Source workbooks and private reconciliation artifacts must never be pushed to the public repository.
+Run the schema migration before starting the new server. It enables persistent workflow items for imports, approvals, collections, doctor payments, budgets, workbook reviews, leads, forecast snapshots, cash plans and confirmed cash movements. Master changes no longer require reopening every month: only changes affecting locked results are rejected. Manual adjustments now go through independent Admin approval; use Operations to review them. Set `PRIVATE_DATA_DIR` outside the checkout before using real workbook review in PostgreSQL mode. Source workbooks and private reconciliation artifacts must never be pushed to the public repository.

@@ -30,6 +30,7 @@ const { randomUUID } = require('node:crypto');
     'Marketing wallet',
     'Analytics',
     'Budget planner',
+    'Planning',
     'Operations',
     'Receivables',
     'Workbook review',
@@ -69,6 +70,42 @@ const { randomUUID } = require('node:crypto');
     if (name === 'Budget planner') {
       await page.getByRole('button', { name: 'Calculate projection', exact: true }).click();
       await page.getByText('PROJECTED SWIZTON REVENUE', { exact: true }).waitFor();
+    }
+    if (name === 'Planning') {
+      await page.getByRole('button', { name: '+ New procedure lead', exact: true }).click();
+      await page.getByLabel('Patient / lead reference', { exact: true }).fill(patientReference);
+      await page.getByLabel('Expected procedure date', { exact: true }).fill('2026-06-20');
+      await page.getByLabel('Expected gross approval · AED', { exact: true }).fill('10000');
+      await page
+        .getByLabel('Lead / referral source', { exact: true })
+        .fill('Synthetic browser referral');
+      await page
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Synthetic browser forecast lifecycle');
+      await page.getByRole('button', { name: 'Save procedure lead', exact: true }).click();
+      await page.getByRole('status').getByText('Procedure lead saved', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Rolling forecast', exact: true }).click();
+      await page.getByLabel('Forecast cutoff', { exact: true }).fill('2026-06-01');
+      await page.getByRole('button', { name: 'Preview rolling forecast', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Forecast preview calculated', { exact: true })
+        .waitFor();
+      await page
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Synthetic browser snapshot capture');
+      await page.getByRole('button', { name: 'Save forecast snapshot', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Immutable forecast snapshot saved', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: 'Forecast accuracy', exact: true }).click();
+      await page.getByRole('button', { name: 'Cash outlook', exact: true }).click();
+      await page.getByRole('button', { name: 'Calculate cash outlook', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Cash outlook calculated', { exact: true })
+        .waitFor();
     }
     if (name === 'Masters') {
       await page.getByRole('button', { name: 'procedures', exact: true }).click();

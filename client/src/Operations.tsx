@@ -17,7 +17,7 @@ type Props = {
   refresh: () => Promise<void>;
   demo: boolean;
 };
-function useAction(refresh: () => Promise<void>) {
+export function useAction(refresh: () => Promise<void>) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
@@ -43,7 +43,7 @@ function useAction(refresh: () => Promise<void>) {
     },
   };
 }
-function Alerts({ s }: { s: ReturnType<typeof useAction> }) {
+export function Alerts({ s }: { s: ReturnType<typeof useAction> }) {
   return (
     <>
       {s.error && (
@@ -60,7 +60,7 @@ function Alerts({ s }: { s: ReturnType<typeof useAction> }) {
     </>
   );
 }
-function Reason({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function Reason({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <label>
       Reason / approval note

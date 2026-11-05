@@ -1,3 +1,4 @@
+import { validatePlanningReferences, cashReferenceExists, remainingExpense } from './planning.ts';
 import { Decimal as D } from 'decimal.js';
 import { calculateMonth, entryFacts, billShare, affectedMonths } from './engine.ts';
 import type { Dataset, Masters } from './model.ts';
@@ -25,6 +26,7 @@ export function replaceMasters(d: Dataset, next: Masters) {
   const previous = d.masters;
   const candidate = { ...d, masters: next };
   validateDataset(candidate);
+  validatePlanningReferences(candidate);
   for (const close of d.closes.filter((c) => c.locked)) {
     for (const version of ['Actual', 'Approx'] as const)
       if (
@@ -51,6 +53,14 @@ export function replaceMasters(d: Dataset, next: Masters) {
     for (const row of doctorPayables(candidate, period))
       if (new D(row.outstanding).lt(0))
         throw Error(`Master change would overpay Dr. ${row.doctor}`);
+  for (const e of candidate.entries)
+    if (
+      e.kind === 'expense' &&
+      e.version === 'Actual' &&
+      candidate.operations?.some((o) => o.kind === 'cash_movement' && o.linkedExpenseId === e.id)
+    )
+      if (remainingExpense(candidate, e.id).lt(0))
+        throw Error('Master change would overpay an expense');
   d.masters = next;
 }
 function protectPaidFees(d: Dataset) {
@@ -131,8 +141,7 @@ export function addSettlement(d: Dataset, s: Settlement) {
       .reduce((a, p) => a.plus(p.amount), new D(0));
   if (new D(s.amount).lte(0) || paid.plus(s.amount).gt(total))
     throw Error('Collection must be positive and cannot exceed the remaining bill share');
-  if (d.operations?.some((o) => o.kind === 'settlement' && o.reference === s.reference))
-    throw Error('Collection reference already recorded');
+  if (cashReferenceExists(d, s.reference)) throw Error('Collection reference already recorded');
   (d.operations ??= []).push(s);
 }
 export function closeReadiness(d: Dataset, month: string) {
@@ -189,7 +198,6 @@ export function addDoctorPayment(d: Dataset, p: DoctorPayment) {
   const due = doctorPayables(d, p.period).find((r) => r.doctor === p.doctor)!;
   if (new D(p.amount).lte(0) || new D(p.amount).gt(due.outstanding))
     throw Error('Payment exceeds the remaining accrued professional fee');
-  if (d.operations?.some((o) => o.kind === 'doctor_payment' && o.reference === p.reference))
-    throw Error('Payment reference already recorded');
+  if (cashReferenceExists(d, p.reference)) throw Error('Payment reference already recorded');
   (d.operations ??= []).push(p);
 }

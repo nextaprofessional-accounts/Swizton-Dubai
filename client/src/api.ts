@@ -17,9 +17,14 @@ export async function api(path: string, body?: unknown, method?: string) {
   }
   return data;
 }
-export async function download(path: string, name: string) {
+export async function download(path: string, name: string, body?: unknown) {
   const r = await fetch(`/api${path}`, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('swizton-token') ?? ''}` },
+    method: body ? 'POST' : 'GET',
+    headers: {
+      Authorization: `Bearer ${sessionStorage.getItem('swizton-token') ?? ''}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!r.ok) throw Error((await r.json()).error);
   const u = URL.createObjectURL(await r.blob()),
