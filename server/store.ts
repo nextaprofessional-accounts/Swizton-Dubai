@@ -61,10 +61,15 @@ function changeSet(before: Dataset, after: Dataset, entity: string, action: stri
       after: { close: after.closes.find((c) => c.month === entity) ?? null },
     };
   return {
-    before: { operation: before.operations?.find((o) => o.id === entity) ?? null, entries: [] },
+    before: {
+      operation: before.operations?.find((o) => o.id === entity) ?? null,
+      entries: [],
+      ...(action === 'finance.fx.review' ? { fx: before.masters.fx } : {}),
+    },
     after: {
       operation: after.operations?.find((o) => o.id === entity) ?? null,
       entries: newEntries,
+      ...(action === 'finance.fx.review' ? { fx: after.masters.fx } : {}),
       relatedOperations: (after.operations ?? []).filter(
         (o) => o.id !== entity && !before.operations?.some((old) => old.id === o.id),
       ),

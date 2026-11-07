@@ -33,6 +33,7 @@ const { randomUUID } = require('node:crypto');
     'Analytics',
     'Budget planner',
     'Planning',
+    'Finance validation',
     'Operations',
     'Receivables',
     'Workbook review',
@@ -72,6 +73,63 @@ const { randomUUID } = require('node:crypto');
     if (name === 'Budget planner') {
       await page.getByRole('button', { name: 'Calculate projection', exact: true }).click();
       await page.getByText('PROJECTED SWIZTON REVENUE', { exact: true }).waitFor();
+    }
+    if (name === 'Finance validation') {
+      const signInAs = async (role) => {
+        await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+        await page.getByRole('textbox', { name: 'Email', exact: true }).fill(`${role}@demo.local`);
+        await page.getByRole('textbox', { name: 'Password', exact: true }).fill('demo-only');
+        await page.getByRole('button', { name: 'Sign in →', exact: true }).click();
+        await page
+          .getByRole('heading', { name: 'Finance validation & approval', exact: true })
+          .waitFor();
+      };
+      await signInAs('finance');
+      await page.getByLabel('FX month', { exact: true }).fill('2026-10');
+      await page.getByRole('combobox', { name: /Averaging method/ }).selectOption('Daily average');
+      await page.getByLabel('AED per USD', { exact: true }).fill('3.6725');
+      await page
+        .getByLabel('Rate source / publication reference', { exact: true })
+        .fill(`Synthetic browser FX ${runId}`);
+      await page
+        .getByLabel('Daily observations CSV · INR per AED', { exact: true })
+        .fill('date,rate\n2026-10-01,25.4\n2026-10-02,25.6');
+      await page
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Synthetic daily average source verification');
+      await page.getByRole('button', { name: 'Preview monthly average', exact: true }).click();
+      await page.getByRole('status').getByText('FX average calculated', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Submit rate for review', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Monthly FX submitted for independent review', { exact: true })
+        .waitFor();
+      await signInAs('admin');
+      const register = page.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Rate approval register', exact: true }),
+      });
+      await register
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Independently verified synthetic source and coverage');
+      await register
+        .getByRole('row')
+        .filter({ hasText: `Synthetic browser FX ${runId}` })
+        .getByRole('button', { name: 'Approve rate', exact: true })
+        .click();
+      await page
+        .getByRole('status')
+        .getByText('Monthly FX approved and applied', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: 'Exception register', exact: true }).click();
+      await page
+        .getByRole('heading', { name: 'Workbook exception register', exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: 'Reconciliation & sign-off', exact: true }).click();
+      await page
+        .getByRole('heading', { name: 'Original baseline vs application Actual', exact: true })
+        .waitFor();
+      await page.getByText('Sign-off blockers', { exact: true }).waitFor();
+      await page.screenshot({ path: '/tmp/swizton-finance-validation.png', fullPage: true });
     }
     if (name === 'Planning') {
       await page.getByRole('button', { name: '+ New procedure lead', exact: true }).click();

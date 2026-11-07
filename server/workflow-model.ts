@@ -1,3 +1,4 @@
+import type { FxProposal, FinanceException, FinanceSignoff } from './finance-model.ts';
 import type { Lead, ForecastSnapshot, CashPlan, CashMovement } from './planning-model.ts';
 import type { Entry } from './model.ts';
 interface Base {
@@ -90,6 +91,9 @@ export type DoctorPayment = Base & {
   reason: string;
 };
 export type WorkflowItem =
+  | FxProposal
+  | FinanceException
+  | FinanceSignoff
   | Lead
   | ForecastSnapshot
   | CashPlan

@@ -234,3 +234,5 @@ VAT and UAE Corporate Tax fields are available as bill disclosures. Tax applicab
 `npm audit --omit=dev` reported 0 high/critical and 8 moderate advisories in the ExcelJS archive dependency tree (legacy minimatch and dependents). The direct CSV parser and the UUID dependency were updated to patched releases and revalidated. A forced major minimatch override would break the legacy glob API, so it was not applied blindly. Isolate untrusted spreadsheet processing and replace or upgrade this archive chain before production approval. This application is not represented as production-security certified.
 
 The v0.3 planning schema, API and wireframes are documented in [FORECASTING.md](FORECASTING.md). Planning data uses audited workflow records; frozen snapshots remain separate from the P&L ledger.
+
+The v0.4 [Finance validation workflow](FINANCE_VALIDATION.md) adds evidence-backed monthly FX approvals, exception review and monthly AED control-total sign-offs. This does not replace the remaining full-source migration and exact Excel-layout acceptance gates.

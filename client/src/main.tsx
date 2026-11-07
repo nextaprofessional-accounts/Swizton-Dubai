@@ -1,3 +1,4 @@
+import { FinanceValidation } from './FinanceValidation';
 import { Planning } from './Planning';
 import React, { useEffect, useState, createContext, useContext } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -158,6 +159,7 @@ function App() {
   }
   const writable = user?.role !== 'Management';
   const independent = [
+    'Finance validation',
     'Planning',
     'Operations',
     'Receivables',
@@ -439,6 +441,9 @@ function App() {
             <div className="loading" role="status">
               Updating workspace…
             </div>
+          )}
+          {ds && page === 'Finance validation' && (
+            <FinanceValidation ds={ds} revision={revision} year={year} user={user} refresh={load} />
           )}
           {ds && page === 'Planning' && (
             <Planning ds={ds} revision={revision} user={user} refresh={load} />

@@ -1498,3 +1498,19 @@ footer {
     transition: transform 0.2s ease;
   }
 }
+
+.badge.warning {
+  background: #fff5df;
+  border-color: #ebd8ab;
+  color: #85611f;
+}
+.badge.neutral {
+  background: #eef2f6;
+  border-color: #dce4ec;
+  color: #5d7386;
+}
+.badge.rejected {
+  background: #fdf0ed;
+  border-color: #edd0c9;
+  color: #9c5145;
+}

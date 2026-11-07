@@ -143,6 +143,38 @@ test('close rejects Actual and Approx changes and annual prepaids; reopening is 
     (
       await request('/months/2026-07/close', finance, {
         locked: true,
+        reason: 'Verify unapproved FX blocks closing',
+        revision: s.revision,
+      })
+    ).status,
+    400,
+  );
+  const fx = s.data.masters.fx.find((f: any) => f.month === '2026-07');
+  const proposal = await request('/finance/fx', finance, {
+    input: {
+      month: fx.month,
+      method: 'Provided monthly average',
+      inrPerAed: fx.inrPerAed,
+      aedPerUsd: fx.aedPerUsd,
+      source: 'Synthetic monthly closing publication',
+      reason: 'Prepare unchanged close rate for approval',
+    },
+    revision: s.revision,
+  });
+  assert.equal(proposal.status, 201, await proposal.clone().text());
+  const fxId = (await proposal.json()).id;
+  s = await state();
+  const approval = await request(`/finance/fx/${fxId}/review`, admin, {
+    approve: true,
+    reason: 'Independent close rate verification',
+    revision: s.revision,
+  });
+  assert.equal(approval.status, 200, await approval.clone().text());
+  s = await state();
+  assert.equal(
+    (
+      await request('/months/2026-07/close', finance, {
+        locked: true,
         reason: 'Reconcile fixture month',
         revision: s.revision,
       })
@@ -743,4 +775,172 @@ test('cash realization is atomic, audited and does not post a second expense or 
   const audit = JSON.stringify(await (await request('/audit', admin)).json());
   assert.match(audit, /relatedOperations/);
   assert.match(audit, /API-CASH-CAPITAL/);
+});
+
+test('monthly FX APIs enforce independent review, preserve pending inputs and prohibit direct master bypass', async () => {
+  let s = await state();
+  const input = {
+    month: '2026-08',
+    method: 'Daily average',
+    aedPerUsd: '3.6725',
+    csv: 'date,rate\n2026-08-03,25.4\n2026-08-04,25.6',
+    source: 'Synthetic approved publication reference',
+    reason: 'Test monthly average approval workflow',
+  };
+  const before = s.data.masters.fx.find((f: any) => f.month === input.month);
+  assert.equal(
+    (await request('/finance/fx', management, { input, revision: s.revision })).status,
+    403,
+  );
+  const preview = await request('/finance/fx/preview', management, input);
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).inrPerAed, '25.500000');
+  const created = await request('/finance/fx', finance, { input, revision: s.revision });
+  assert.equal(created.status, 201, await created.clone().text());
+  const { id } = await created.json();
+  s = await state();
+  assert.deepEqual(
+    s.data.masters.fx.find((f: any) => f.month === input.month),
+    before,
+  );
+  assert.equal(
+    (
+      await request(`/finance/fx/${id}/review`, finance, {
+        approve: true,
+        reason: 'Independent review required',
+        revision: s.revision,
+      })
+    ).status,
+    403,
+  );
+  const approved = await request(`/finance/fx/${id}/review`, admin, {
+    approve: true,
+    reason: 'Verified synthetic publication and date coverage',
+    revision: s.revision,
+  });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  s = await state();
+  assert.equal(s.data.masters.fx.find((f: any) => f.month === input.month).approvalId, id);
+  const bypass = structuredClone(s.data.masters);
+  bypass.fx.find((f: any) => f.month === input.month).inrPerAed = '26';
+  const rejected = await request(
+    '/masters',
+    admin,
+    { masters: bypass, reason: 'Test direct FX edit prevention', revision: s.revision },
+    'PUT',
+  );
+  assert.equal(rejected.status, 400);
+  assert.match(await rejected.text(), /independent approval/);
+  const ordinary = await request(
+    '/masters',
+    admin,
+    {
+      masters: s.data.masters,
+      reason: 'Verify normal master save still works',
+      revision: s.revision,
+    },
+    'PUT',
+  );
+  assert.equal(ordinary.status, 200, await ordinary.clone().text());
+  s = await state();
+  const own = await request('/finance/fx', admin, {
+    input: {
+      ...input,
+      month: '2026-09',
+      method: 'Provided monthly average',
+      csv: undefined,
+      inrPerAed: '25.5',
+    },
+    revision: s.revision,
+  });
+  assert.equal(own.status, 201);
+  const ownId = (await own.json()).id;
+  s = await state();
+  assert.equal(
+    (
+      await request(`/finance/fx/${ownId}/review`, admin, {
+        approve: true,
+        reason: 'Attempt own approval for test',
+        revision: s.revision,
+      })
+    ).status,
+    400,
+  );
+});
+
+test('workbook exception APIs preserve original evidence, prevent self review and export reconciliation blockers', async () => {
+  const w = new ExcelJS.Workbook(),
+    p = w.addWorksheet('2026');
+  w.addWorksheet('IP Details');
+  p.getCell('G6').value = 100;
+  p.getCell('G7').value = 100;
+  p.getCell('G14').value = 30;
+  p.getCell('BE14').value = { formula: 'BC14/BC14', result: { error: '#DIV/0!' } };
+  let s = await state();
+  const created = await request('/workbooks/review', finance, {
+    name: 'Synthetic finance exception workbook.xlsx',
+    content: Buffer.from(await w.xlsx.writeBuffer()).toString('base64'),
+    reason: 'Create synthetic private exception evidence',
+    revision: s.revision,
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const id = (await created.json()).id;
+  const readiness = await request(`/finance/workbooks/${id}/2026/readiness`, management);
+  assert.equal(readiness.status, 200);
+  const result = await readiness.json();
+  assert.ok(result.exceptions.length > 0);
+  const original = (await state()).data.operations.find((o: any) => o.id === id);
+  s = await state();
+  const body = {
+    workbookId: id,
+    itemKey: result.exceptions[0].key,
+    disposition: 'Retain original',
+    evidence: 'Synthetic original finding verified; retain pending restatement',
+    reason: 'Preserve original source pending review',
+    revision: s.revision,
+  };
+  assert.equal((await request('/finance/exceptions', management, body)).status, 403);
+  const proposed = await request('/finance/exceptions', admin, body);
+  assert.equal(proposed.status, 201, await proposed.clone().text());
+  const itemId = (await proposed.json()).id;
+  s = await state();
+  assert.equal(
+    (
+      await request(`/finance/exceptions/${itemId}/review`, admin, {
+        approve: true,
+        reason: 'Attempt own disposition approval',
+        revision: s.revision,
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await request(`/finance/workbooks/${id}/2026/export`, management)).status, 200);
+  assert.equal(
+    (
+      await request('/finance/signoffs', finance, {
+        workbookId: id,
+        year: 2026,
+        mode: 'Reconciled',
+        reason: 'Verify role restriction on signoff',
+        revision: s.revision,
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request('/finance/signoffs', admin, {
+        workbookId: id,
+        year: 2026,
+        mode: 'Reconciled',
+        reason: 'Verify incomplete evidence blocks signoff',
+        revision: s.revision,
+      })
+    ).status,
+    400,
+  );
+  assert.deepEqual(
+    (await state()).data.operations.find((o: any) => o.id === id),
+    original,
+  );
 });

@@ -1,3 +1,4 @@
+import { approvedFx } from './fx-provenance.ts';
 import { validatePlanningReferences, cashReferenceExists, remainingExpense } from './planning.ts';
 import { Decimal as D } from 'decimal.js';
 import { calculateMonth, entryFacts, billShare, affectedMonths } from './engine.ts';
@@ -148,6 +149,14 @@ export function closeReadiness(d: Dataset, month: string) {
   const blockers: string[] = [],
     warnings: string[] = [];
   if (!d.masters.fx.some((f) => f.month === month)) blockers.push('Monthly FX is missing');
+  else if (!approvedFx(d, month))
+    blockers.push('Monthly FX requires independent approval in Finance validation');
+  if (
+    d.operations?.some(
+      (o) => o.kind === 'fx_proposal' && o.status === 'Pending' && o.input.month === month,
+    )
+  )
+    blockers.push('A replacement monthly FX proposal awaits independent review');
   if (!d.masters.targets.some((t) => t.month === month)) blockers.push('Monthly target is missing');
   const pending = (d.operations ?? []).filter(
     (o) =>

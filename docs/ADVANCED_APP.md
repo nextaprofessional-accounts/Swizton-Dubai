@@ -4,6 +4,8 @@ This release extends the original P&L application with complete operational work
 
 ## Working screens and workflows
 
+For the current v0.4 Finance validation module, see [monthly FX and reconciliation approvals](FINANCE_VALIDATION.md). FX changes now use independent approval rather than direct master editing.
+
 | Screen           | What works                                                                                                                                                                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Overview         | Monthly Swizton revenue, expense, net result, cases/target, source mix and source links                                                                                                                |
@@ -16,7 +18,7 @@ This release extends the original P&L application with complete operational work
 | Operations       | Row-by-row import previews, explicit atomic commit/cancel, independently approved adjustments, immutable named budget versions and comparison with Actual                                              |
 | Receivables      | Original invoice and recognition dates, ageing buckets, collection history, remaining balance, professional-fee accruals and doctor payments                                                           |
 | Workbook review  | Private XLSX inspection, source hash/version, preserved source-layout download, source-row check counts, observed monthly statement and filterable formula/feeder exceptions and sheet/error inventory |
-| Masters          | Guided forms for hospitals, doctors, procedures, staff, expense heads, cost classification, effective share rules/component matrices, approved FX, targets and historical balances                     |
+| Masters          | Guided forms for hospitals, doctors, procedures, staff, expense heads, cost classification, effective share rules/component matrices, FX visibility, targets and historical balances                   |
 | Month close      | Readiness blockers/warnings, pending-adjustment check, locked period protection and Admin reopen with reason                                                                                           |
 | User access      | Admin-managed named accounts, roles, password resets and immediate deactivation and session revocation                                                                                                 |
 | Audit trail      | Append-only changed-record evidence, actor identity, reasons and pagination through older events                                                                                                       |
@@ -64,7 +66,7 @@ An adjustment may change a source revenue/expense amount, or explicitly change *
 
 ### Masters after close
 
-A future procedure, hospital or FX period can be added without reopening completed months, provided locked monetary results, KPIs and source-share facts remain identical. A master update that changes a closed financial result or an already settled obligation is rejected. Zero-value new procedure/hospital rows do not by themselves alter a closed result. Reopening a month requires Admin and a reason.
+A future procedure or hospital can be added without reopening completed months, provided locked monetary results, KPIs and source-share facts remain identical. A master update that changes a closed financial result or an already settled obligation is rejected. Zero-value new procedure/hospital rows do not by themselves alter a closed result. Reopening a month requires Admin and a reason.
 
 ### Profitability and budgets
 
@@ -152,3 +154,7 @@ This release implements the application workflows. It does **not** claim the leg
 ## Forecasting phase (v0.3)
 
 The next phase adds a procedure pipeline, rolling forecasts, immutable version snapshots, forecast accuracy and dated cash plans. See [Forecasting and cash planning](FORECASTING.md) for formulas, APIs, workflow diagrams, upgrade steps and limits. Existing P&L, workbook preservation and approval rules remain in force.
+
+## Finance validation phase (v0.4)
+
+[Finance validation](FINANCE_VALIDATION.md) adds monthly FX averages and independent approvals, source exception dispositions, monthly AED control comparisons, financial-state sign-offs and a review evidence export. New month closes require a currently approved monthly rate; direct FX changes in Masters are replaced by the approval workflow. Source figures are preserved, and actual RBI-rate approval/reconciliation remain human Finance responsibilities.

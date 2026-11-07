@@ -34,6 +34,51 @@ try {
     'Admin',
     await bcrypt.hash(password, 8),
   ]);
+  const financeId = randomUUID(),
+    controlsId = randomUUID();
+  await db.query('INSERT INTO app_user(id,email,role,password_hash) VALUES($1,$2,$3,$4)', [
+    financeId,
+    'packaged-finance@demo.local',
+    'Finance',
+    await bcrypt.hash(password, 8),
+  ]);
+  const controls = {
+    id: controlsId,
+    kind: 'workbook_review',
+    createdBy: financeId,
+    createdAt: new Date().toISOString(),
+    name: 'Synthetic packaged control fixture',
+    sourceSha256: 'synthetic-test-controls-only',
+    storageId: 'sample',
+    inventory: [],
+    sourceChecks: [],
+    issues: [
+      {
+        code: 'SYNTHETIC_FINDING',
+        severity: 'warning',
+        cells: ['Synthetic!G14'],
+        detail: 'Synthetic retained exception for persistence testing',
+      },
+    ],
+    readiness: { matchedChecks: 0, mismatchedChecks: 0, blockedChecks: 0 },
+    baseline: Array.from({ length: 12 }, (_, i) => ({
+      month: `2026-${String(i + 1).padStart(2, '0')}`,
+      revenue: '0',
+      swizton: '0',
+      expense: '0',
+      profit: '0',
+      rawInr: '0',
+    })),
+    decisions: {
+      preserveOriginal: true,
+      fxStatus: 'Awaiting approved RBI rates',
+      recognition: 'Separate invoice date and recognition month',
+    },
+  };
+  await db.query(
+    'INSERT INTO workflow_item(id,organisation_id,kind,payload,created_by) VALUES($1,1,$2,$3,$4)',
+    [controlsId, 'workbook_review', JSON.stringify(controls), financeId],
+  );
   const probe = createServer();
   probe.listen(0, '127.0.0.1');
   await once(probe, 'listening');
@@ -73,10 +118,10 @@ try {
   });
   assert.equal(login.status, 200);
   const token = (await login.json()).token;
-  const request = (path: string, body?: unknown) =>
+  const request = (path: string, body?: unknown, actor = token) =>
     fetch(origin + '/api' + path, {
       method: body ? 'POST' : 'GET',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${actor}`, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
   const state = await (await request('/data')).json();
@@ -110,9 +155,9 @@ try {
   assert.ok(
     next.data.operations.some((o: any) => o.kind === 'workbook_review' && o.id === result.id),
   );
-  async function write(path: string, body: object) {
+  async function write(path: string, body: object, actor = token) {
     const current = await (await request('/data')).json();
-    const response = await request(path, { ...body, revision: current.revision });
+    const response = await request(path, { ...body, revision: current.revision }, actor);
     assert.equal(response.status, 201, await response.clone().text());
     return response.json();
   }
@@ -168,11 +213,82 @@ try {
       final.data.operations.some((o: any) => o.kind === kind),
       kind,
     );
+  const financeLogin = await fetch(origin + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'packaged-finance@demo.local', password }),
+  });
+  assert.equal(financeLogin.status, 200);
+  const financeToken = (await financeLogin.json()).token;
+  async function approve(path: string) {
+    const current = await (await request('/data')).json();
+    const response = await request(path, {
+      approve: true,
+      reason: 'Independent synthetic evidence verification',
+      revision: current.revision,
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+  }
+  for (let i = 1; i <= 12; i++) {
+    const proposal = await write(
+      '/finance/fx',
+      {
+        input: {
+          month: `2026-${String(i).padStart(2, '0')}`,
+          method: 'Provided monthly average',
+          inrPerAed: '25.5',
+          aedPerUsd: '3.6725',
+          observations: [],
+          source: 'Synthetic packaged publication',
+          reason: 'Verify persistent monthly FX approval',
+        },
+      },
+      financeToken,
+    );
+    await approve(`/finance/fx/${proposal.id}/review`);
+  }
+  const exception = await write(
+    '/finance/exceptions',
+    {
+      workbookId: controlsId,
+      itemKey: 'issue:0',
+      disposition: 'Retain original',
+      evidence: 'Synthetic retained source evidence for packaged validation',
+      reason: 'Verify independent exception approval',
+    },
+    financeToken,
+  );
+  await approve(`/finance/exceptions/${exception.id}/review`);
+  await write('/finance/signoffs', {
+    workbookId: controlsId,
+    year: 2026,
+    mode: 'Reviewed with exceptions',
+    reason: 'Acknowledge synthetic controls with retained finding',
+  });
+  const readiness = await (await request(`/finance/workbooks/${controlsId}/2026/readiness`)).json();
+  assert.equal(
+    readiness.signoffs.at(-1).current,
+    true,
+    'PostgreSQL JSON ordering must not invalidate a new sign-off',
+  );
+  assert.equal(readiness.summary.retainedExceptions, 1);
+  const reviewExport = await request(`/finance/workbooks/${controlsId}/2026/export`);
+  assert.equal(reviewExport.status, 200);
+  const exportBook = new ExcelJS.Workbook();
+  await exportBook.xlsx.load(Buffer.from(await reviewExport.arrayBuffer()) as any);
+  assert.ok(exportBook.getWorksheet('Exception register'));
+  const completed = await (await request('/data')).json();
+  assert.equal(completed.data.entries.length, 0);
+  for (const kind of ['fx_proposal', 'finance_exception', 'finance_signoff'])
+    assert.ok(
+      completed.data.operations.some((o: any) => o.kind === kind),
+      kind,
+    );
   const page = await fetch(origin);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /type="module"/);
   console.log(
-    'PASS packaged server, PostgreSQL, private workbook baseline, persistent lead/forecast/cash workflows, protected exports and unchanged ledger',
+    'PASS compiled server, PostgreSQL, private workbook baseline, persistent planning, independent FX/exception approvals, current sign-off, review exports and unchanged ledger',
   );
 } finally {
   if (child && child.exitCode === null) {

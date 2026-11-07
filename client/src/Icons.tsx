@@ -166,6 +166,7 @@ export const navigation = [
   {
     label: 'Control centre',
     pages: [
+      ['Finance validation', 'shield'],
       ['Operations', 'operations'],
       ['Workbook review', 'workbook'],
       ['Masters', 'masters'],

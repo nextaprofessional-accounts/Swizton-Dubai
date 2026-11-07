@@ -151,6 +151,7 @@ export const masterSchema = z.object({
   ),
   fx: z.array(
     z.object({
+      approvalId: z.string().uuid().optional(),
       month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       inrPerAed: money.refine((v) => Number(v) > 0),
       aedPerUsd: money.refine((v) => Number(v) > 0),

@@ -2,13 +2,13 @@
 
 P&L and revenue-share management for **NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO**. React + TypeScript, Node/Express, PostgreSQL 16 and Decimal.js.
 
-**Advanced finance operations and forecasting application (v0.3.1) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
+**Advanced finance operations and forecasting application (v0.4.0) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
 
 ## Professional workspace design
 
 The v0.3.1 interface introduces grouped navy navigation, consistent SVG icons, emerald financial cards, a signed profit/loss chart, clearer forms and financial tables, and a responsive mobile drawer with keyboard controls. The shared design covers reporting, planning, operations and administration. Existing calculations, approval rules and role permissions remain unchanged.
 
-For this UI-only upgrade, download the latest code, run `npm ci` and `npm run build`, then restart your server with the same environment settings. There is no additional database schema change beyond v0.3.
+The current v0.4 release adds [Finance validation](docs/FINANCE_VALIDATION.md): monthly average FX preparation, independent approvals, exception review, AED reconciliation and sign-off evidence. PostgreSQL users must run `npm run db:migrate` before starting this version. Legacy rates are retained but require approval before new month closes.
 
 ## Quick start: sample workspace
 
@@ -25,6 +25,20 @@ The server serves the built React app on port 3001. Demo logins: `admin@demo.loc
 
 For development, run `DEMO_MODE=true npm run dev`. For front-end hot reload, run `npm run client` in a second terminal; Vite proxies `/api` to port 3001.
 
+## Windows PowerShell: sample workspace
+
+Open PowerShell in the extracted folder containing `package.json`. Run each command successfully before proceeding:
+
+```powershell
+npm ci
+npm run build
+$env:DEMO_MODE="true"
+$env:NODE_ENV="production"
+npm start
+```
+
+Keep the terminal open. After `Swizton API listening on 3001`, open `http://localhost:3001`. Demo login is `admin@demo.local` / `demo-only`; use `finance@demo.local` to prepare a rate and Admin to review it. If `build/server/index.js` is missing, the build has not completed successfully. Never use sample mode for real patient records.
+
 ## PostgreSQL mode
 
 Provide a PostgreSQL 16 database, set `DATABASE_URL` and a random `JWT_SECRET` of at least 32 characters via a secure environment provider. `.env.example` lists names; scripts do not automatically load `.env`. No production passwords or default users are created.
@@ -37,7 +51,7 @@ npm run build
 DEMO_MODE=false NODE_ENV=production npm start
 ```
 
-Migrations create tables and seed master **names/categories only**, with empty rules, FX and targets. Before entering data, Admin must add approved effective-dated rules for each hospital, OP Consultation and Admin Cost Reimbursement, monthly FX for all 12 months, and monthly targets through Masters. A fresh organisation displays the master editor when required FX is absent. Historical annual AED/INR lakh values must be supplied explicitly.
+Migrations create tables and seed master **names/categories only**, with empty rules, FX and targets. Before entering data, Admin must add approved effective-dated rules for each hospital, OP Consultation and Admin Cost Reimbursement, monthly targets through Masters, and monthly FX for all 12 months through Finance validation with independent approval. A fresh organisation displays the master editor when required FX is absent. Historical annual AED/INR lakh values must be supplied explicitly.
 
 Use a private, authenticated database; the loopback-only trust-authenticated container used during development validation is a disposable test fixture, not a deployment configuration. Apply [schema.sql](db/schema.sql) with a migration role, then grant the application only the necessary table/sequence rights; never permit updates/deletes/truncates on audit events. Keep the database TLS settings appropriate for the deployment; certificate verification must remain enabled for remote databases.
 
@@ -60,6 +74,7 @@ Stop the running server, extract the latest ZIP into a separate folder, and pres
 
 ## Deliverables
 
+- [Monthly FX approval, source exceptions and reconciliation sign-off](docs/FINANCE_VALIDATION.md)
 - [Rolling forecasts, lead pipeline, accuracy and cash planning](docs/FORECASTING.md)
 - [Advanced workflows, additional APIs, schema extension and deployment guide](docs/ADVANCED_APP.md)
 - [Architecture, ERD, API list, screen wireframes, financial assumptions, migration plan and phased roadmap](docs/ARCHITECTURE.md)
@@ -75,6 +90,6 @@ FY totals are **Actual only**. A separate working outlook uses Approx until a mo
 
 Workbook inspection confirmed the forecast chain (gross approval → net procedure charge → doctor payout → Swizton share). Recorded bill deductions now support reasoned overrides. Deduction bases, refundable treatment, recognition timing, source errors, FX approvals and exact automated print layout remain to be settled. XLSX has Jan–Dec Approx/Actual blocks with three currencies/ratio columns; PDF currently uses readable monthly pages. Guided masters, classified breakeven, case-linked costs, hospital collections, professional-fee payments, adjustment approvals, saved budget snapshots and workbook review are implemented. Statutory VAT/Corporate Tax calculation, bank execution/reversals, SSO/MFA and production hosting/backup operations remain outside this release. See the architecture document for the complete acceptance boundary.
 
-## Schema and private data (v0.3)
+## Schema and private data (v0.4)
 
-Run the schema migration before starting the new server. It enables persistent workflow items for imports, approvals, collections, doctor payments, budgets, workbook reviews, leads, forecast snapshots, cash plans and confirmed cash movements. Master changes no longer require reopening every month: only changes affecting locked results are rejected. Manual adjustments now go through independent Admin approval; use Operations to review them. Set `PRIVATE_DATA_DIR` outside the checkout before using real workbook review in PostgreSQL mode. Source workbooks and private reconciliation artifacts must never be pushed to the public repository.
+Run the schema migration before starting the new server. It enables persistent workflow items for imports, approvals, collections, doctor payments, budgets, workbook reviews, leads, forecast snapshots, cash plans, confirmed cash movements, FX proposals, exception reviews and financial sign-offs. Master changes no longer require reopening every month: only changes affecting locked results are rejected. Manual adjustments now go through independent Admin approval; use Operations to review them. Set `PRIVATE_DATA_DIR` outside the checkout before using real workbook review in PostgreSQL mode. Source workbooks and private reconciliation artifacts must never be pushed to the public repository.

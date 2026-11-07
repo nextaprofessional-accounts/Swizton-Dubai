@@ -752,7 +752,7 @@ export function WorkbookCenter({ ds, revision, user, refresh, demo }: Props) {
         </div>
         <div>
           <b>Monthly FX</b>
-          <span>Awaiting approved RBI rates</span>
+          <span>Approval status is available in Finance validation</span>
         </div>
         <div>
           <b>Recognition</b>

@@ -149,6 +149,12 @@ export function MasterWorkbench({ masters, readOnly = false, save }: Props) {
           </button>
         ))}
       </div>
+      {tab === 'fx' && (
+        <p className="info-note">
+          Monthly FX rates are read-only here. Use Finance validation to prepare a monthly average
+          and obtain independent Admin approval.
+        </p>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
@@ -159,7 +165,7 @@ export function MasterWorkbench({ masters, readOnly = false, save }: Props) {
               ).map((k) => (
                 <th key={k}>{k}</th>
               ))}
-              {!readOnly && <th>Actions</th>}
+              {!readOnly && tab !== 'fx' && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -180,7 +186,7 @@ export function MasterWorkbench({ masters, readOnly = false, save }: Props) {
                       </td>
                     ))
                 )}
-                {!readOnly && (
+                {!readOnly && tab !== 'fx' && (
                   <td>
                     <button className="text-button" onClick={() => edit(row, i)}>
                       Edit
@@ -201,7 +207,7 @@ export function MasterWorkbench({ masters, readOnly = false, save }: Props) {
           </tbody>
         </table>
       </div>
-      {!readOnly && (
+      {!readOnly && tab !== 'fx' && (
         <>
           <button
             className="outline"
@@ -210,7 +216,7 @@ export function MasterWorkbench({ masters, readOnly = false, save }: Props) {
               setRecord(defaults());
             }}
           >
-            + Add {tab === 'rules' ? 'effective rule' : tab === 'fx' ? 'monthly FX rate' : 'record'}
+            + Add {tab === 'rules' ? 'effective rule' : 'record'}
           </button>
           {Object.keys(record).length > 0 && (
             <form onSubmit={stage} className="master-form">
@@ -235,14 +241,6 @@ export function MasterWorkbench({ masters, readOnly = false, save }: Props) {
                       'Variable',
                       'Unclassified',
                     ])}
-                  </>
-                )}
-                {tab === 'fx' && (
-                  <>
-                    {input('month', 'Reporting month', 'month')}
-                    {input('inrPerAed', 'Approved INR per AED', 'number')}
-                    {input('aedPerUsd', 'AED per USD', 'number')}
-                    {input('source', 'RBI source / approval reference')}
                   </>
                 )}
                 {tab === 'targets' && (

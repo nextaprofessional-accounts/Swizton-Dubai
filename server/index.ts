@@ -1,3 +1,5 @@
+import { canonical } from './finance.ts';
+import { registerFinanceRoutes } from './finance-routes.ts';
 import { registerPlanningRoutes } from './planning-routes.ts';
 import express from 'express';
 import helmet from 'helmet';
@@ -122,6 +124,7 @@ const reasonSchema = z.string().min(8).max(1000);
 const revisionSchema = z.number().int().nonnegative();
 registerAdvancedRoutes(app);
 registerPlanningRoutes(app);
+registerFinanceRoutes(app);
 app.get('/api/accounts', roles('Admin'), async (_q, r) => r.json(await listAccounts()));
 app.post('/api/accounts', roles('Admin'), async (q, r) => {
   const b = z
@@ -223,6 +226,11 @@ app.put('/api/masters', roles('Admin'), async (q, r) => {
     .object({ masters: masterSchema, reason: reasonSchema, revision: revisionSchema })
     .parse(q.body);
   await mutate(q.user.id, 'masters.replace', 'masters', b.reason, b.revision, (d) => {
+    if (
+      canonical([...d.masters.fx].sort((a, b) => a.month.localeCompare(b.month))) !==
+      canonical([...b.masters.fx].sort((a, b) => a.month.localeCompare(b.month)))
+    )
+      throw Error('Monthly FX changes require independent approval in Finance validation');
     replaceMasters(d, b.masters);
   });
   r.json({ ok: true });

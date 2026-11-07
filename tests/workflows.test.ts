@@ -1,3 +1,4 @@
+import { averageFx, decideFx } from '../server/finance.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -40,6 +41,29 @@ test('independent review posts an adjustment exactly once and month close blocks
   assert.throws(() => reviewAdjustment(d, id, 'maker', true, 'Self review'), /different Admin/);
   reviewAdjustment(d, id, 'checker', true, 'Reviewed evidence');
   assert.equal(d.entries.length, before + 1);
+  assert.ok(!closeReadiness(d, '2026-06').canClose, 'Unapproved FX still blocks close');
+  const fx = d.masters.fx.find((f) => f.month === '2026-06')!,
+    fxId = randomUUID();
+  const fxInput = {
+    month: fx.month,
+    method: 'Provided monthly average' as const,
+    inrPerAed: fx.inrPerAed,
+    aedPerUsd: fx.aedPerUsd,
+    source: 'Synthetic source verification',
+    reason: 'Verify monthly close rate',
+    observations: [],
+  };
+  d.operations!.push({
+    id: fxId,
+    kind: 'fx_proposal',
+    createdBy: 'maker',
+    createdAt: 'test',
+    input: fxInput,
+    calculated: averageFx(fxInput),
+    previous: structuredClone(fx),
+    status: 'Pending',
+  });
+  decideFx(d, fxId, 'checker', true, 'Independent synthetic FX approval');
   assert.ok(closeReadiness(d, '2026-06').canClose);
   assert.throws(() => reviewAdjustment(d, id, 'checker', true, 'Retry approval'), /Pending/);
 });
