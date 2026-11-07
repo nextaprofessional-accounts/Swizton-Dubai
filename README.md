@@ -2,7 +2,13 @@
 
 P&L and revenue-share management for **NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO**. React + TypeScript, Node/Express, PostgreSQL 16 and Decimal.js.
 
-**Advanced finance operations and forecasting application (v0.3) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
+**Advanced finance operations and forecasting application (v0.3.1) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
+
+## Professional workspace design
+
+The v0.3.1 interface introduces grouped navy navigation, consistent SVG icons, emerald financial cards, a signed profit/loss chart, clearer forms and financial tables, and a responsive mobile drawer with keyboard controls. The shared design covers reporting, planning, operations and administration. Existing calculations, approval rules and role permissions remain unchanged.
+
+For this UI-only upgrade, download the latest code, run `npm ci` and `npm run build`, then restart your server with the same environment settings. There is no additional database schema change beyond v0.3.
 
 ## Quick start: sample workspace
 

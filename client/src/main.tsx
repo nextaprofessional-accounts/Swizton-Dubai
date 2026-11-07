@@ -16,6 +16,9 @@ import {
   DoctorPayables,
 } from './Operations';
 import './style.css';
+import './workspace.css';
+import { Icon, navigation } from './Icons';
+import { ProfitTrend } from './ProfitTrend';
 type Report = ReturnType<typeof calculateYear>;
 type Drill = {
   line: string;
@@ -46,6 +49,7 @@ function App() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
+    [menuOpen, setMenuOpen] = useState(false),
     [drill, setDrill] = useState<Drill | null>(null);
   const [facts, setFacts] = useState<Record<string, Record<string, string>>>({});
   const [reportError, setReportError] = useState('');
@@ -53,11 +57,41 @@ function App() {
     [password, setPassword] = useState('');
   const month = `${year}-${String(mi + 1).padStart(2, '0')}`;
   useEffect(() => {
+    if (!menuOpen) return;
+    const sidebar = document.getElementById('workspace-navigation');
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    sidebar?.querySelector<HTMLButtonElement>('button[aria-current="page"]')?.focus();
+    const keyboard = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Tab') {
+        const buttons = Array.from(sidebar?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+        const first = buttons[0],
+          last = buttons.at(-1);
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        }
+        if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', keyboard);
+    return () => {
+      window.removeEventListener('keydown', keyboard);
+      document.body.style.overflow = previousOverflow;
+      document.querySelector<HTMLButtonElement>('.mobile-menu')?.focus();
+    };
+  }, [menuOpen]);
+  useEffect(() => {
     const expired = () => {
       token = '';
       setUser(null);
       setDs(null);
       setReport(null);
+      setMenuOpen(false);
       setError('Your session has ended. Please sign in again.');
     };
     window.addEventListener('swizton-session-expired', expired);
@@ -147,6 +181,17 @@ function App() {
             <br />
             One place for revenue, shares and performance.
           </p>
+          <div className="login-features">
+            <span>
+              <Icon name="statement" /> Revenue & profitability
+            </span>
+            <span>
+              <Icon name="planning" /> Forecasts & cash planning
+            </span>
+            <span>
+              <Icon name="shield" /> Role-based financial control
+            </span>
+          </div>
           <div className="login-rule" />
           <small>
             NINETY EIGHT FAHRENHEIT
@@ -155,16 +200,29 @@ function App() {
           </small>
         </div>
         <form className="login-card" onSubmit={login}>
+          <span className="login-kicker">
+            <span className="live-dot" /> SWIZTON FINANCE
+          </span>
           <span className="eyebrow">WELCOME BACK</span>
           <h2>Sign in to your workspace</h2>
+          <p className="login-subtitle">Your financial operations, in one clear view.</p>
           <label>
             Email
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              type="email"
+              autoComplete="username"
+              placeholder="you@company.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </label>
           <label>
             Password
             <input
               type="password"
+              autoComplete="current-password"
+              placeholder="Enter your password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -202,49 +260,64 @@ function App() {
   const period = report?.[version === 'Actual' ? 'actual' : 'approx'][mi];
   return (
     <FactsContext.Provider value={facts}>
-      <div className="shell">
-        <aside>
+      <div className={`shell ${menuOpen ? 'menu-open' : ''}`}>
+        <a className="skip-link" href="#workspace-content">
+          Skip to content
+        </a>
+        {menuOpen && (
+          <button
+            className="sidebar-overlay"
+            aria-label="Dismiss navigation"
+            tabIndex={-1}
+            onClick={() => setMenuOpen(false)}
+          />
+        )}
+        <aside id="workspace-navigation">
+          <button
+            className="sidebar-close"
+            aria-label="Close navigation"
+            onClick={() => setMenuOpen(false)}
+          >
+            <Icon name="close" size={18} />
+          </button>
           <Logo />
-          <div className="org-label">DUBAI FINANCE</div>
-          <nav>
-            {[
-              'Overview',
-              'Profit & Loss',
-              'Revenue & bills',
-              'Expense ledger',
-              'Marketing wallet',
-              'Analytics',
-              'Budget planner',
-              'Planning',
-              'Operations',
-              'Receivables',
-              'Workbook review',
-              'Masters',
-              'Month close',
-              'User access',
-              'Audit trail',
-            ]
-              .filter(
-                (p) =>
-                  !(p === 'Audit trail' && !writable) &&
-                  !(p === 'User access' && user.role !== 'Admin'),
-              )
-              .map((p, i) => (
-                <button
-                  className={page === p ? 'active' : ''}
-                  key={p}
-                  onClick={() => {
-                    setPage(p);
-                    setNotice('');
-                    setError('');
-                  }}
-                >
-                  <span aria-hidden="true">
-                    {['◫', '▤', '↗', '▧', '◉', '▥', '◇', '◷', '↔', '⌁', '▣', '⚙', '▣', '♙', '≡'][i]}
-                  </span>
-                  {p}
-                </button>
-              ))}
+          <div className="workspace-identity">
+            <span className="workspace-monogram">SD</span>
+            <div>
+              <b>Swizton Dubai</b>
+              <small>Healthcare finance</small>
+            </div>
+            <span className="workspace-location">UAE</span>
+          </div>
+          <nav aria-label="Main navigation">
+            {navigation.map((group) => (
+              <div className="nav-group" key={group.label}>
+                <div className="nav-group-label">{group.label}</div>
+                {group.pages
+                  .filter(
+                    ([p]) =>
+                      !(p === 'Audit trail' && !writable) &&
+                      !(p === 'User access' && user.role !== 'Admin'),
+                  )
+                  .map(([p, icon]) => (
+                    <button
+                      className={page === p ? 'active' : ''}
+                      aria-current={page === p ? 'page' : undefined}
+                      key={p}
+                      onClick={() => {
+                        setPage(p);
+                        setMenuOpen(false);
+                        setNotice('');
+                        setError('');
+                      }}
+                    >
+                      <Icon name={icon} size={19} />
+                      <span>{p}</span>
+                      {page === p && <span className="nav-active-indicator" />}
+                    </button>
+                  ))}
+              </div>
+            ))}
           </nav>
           <div className="sidebar-bottom">
             <div className="avatar">{user.role[0]}</div>
@@ -260,20 +333,48 @@ function App() {
                 setUser(null);
                 setDs(null);
                 setReport(null);
+                setMenuOpen(false);
               }}
             >
-              ↪
+              <Icon name="logout" size={18} />
             </button>
           </div>
         </aside>
-        <main>
+        <main id="workspace-content" tabIndex={-1} inert={menuOpen}>
+          <div className="workspace-topbar">
+            <div className="workspace-breadcrumb">
+              <button
+                className="mobile-menu"
+                aria-label="Open navigation"
+                aria-expanded={menuOpen}
+                aria-controls="workspace-navigation"
+                onClick={() => setMenuOpen(!menuOpen)}
+              >
+                <Icon name="menu" />
+              </button>
+              <Icon name="overview" size={16} />
+              <span>Workspace</span>
+              <span className="breadcrumb-divider">/</span>
+              <b>{page}</b>
+            </div>
+            <span className="access-chip">
+              <Icon name={writable ? 'shield' : 'lock'} size={15} />
+              {user.role}
+              {!writable ? ' · Read only' : ' access'}
+            </span>
+          </div>
           <header>
             <div>
-              <span className="eyebrow">NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO</span>
+              <span className="eyebrow company-name">
+                NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO
+              </span>
               <h1>{page}</h1>
             </div>
             <div className="header-controls">
-              <span className="live-dot" /> Finance workspace
+              <span className="workspace-status">
+                <span className="live-dot" />
+                {demo ? 'Sample environment' : 'Finance workspace'}
+              </span>
               <select
                 aria-label="Financial year"
                 value={year}
@@ -298,6 +399,7 @@ function App() {
           )}
           <div className="toolbar">
             <div className="period-control">
+              <Icon name="calendar" size={18} />
               <select aria-label="Month" value={mi} onChange={(e) => setMi(Number(e.target.value))}>
                 {months.map((m, i) => (
                   <option key={m} value={i}>
@@ -560,7 +662,16 @@ function App() {
 function Logo() {
   return (
     <div className="logo">
-      <span className="logo-mark">s</span>
+      <span className="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 36 36" fill="none">
+          <path
+            d="M27 10H15a6 6 0 0 0 0 12h6a4 4 0 0 1 0 8H9M9 26h12a6 6 0 0 0 0-12h-6a4 4 0 0 1 0-8h12"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
+      </span>
       <strong>
         swizton<span>healthcare</span>
       </strong>
@@ -580,7 +691,23 @@ function Metric({
 }) {
   return (
     <div className={`metric ${negative ? 'negative' : ''}`}>
-      <span className="metric-label">{label}</span>
+      <div className="metric-heading">
+        <span className="metric-label">{label}</span>
+        <span className="metric-icon">
+          <Icon
+            name={
+              label.includes('REVENUE')
+                ? 'revenue'
+                : label.includes('EXPENSE')
+                  ? 'expense'
+                  : label.includes('CASES')
+                    ? 'hospital'
+                    : 'planning'
+            }
+            size={19}
+          />
+        </span>
+      </div>
       <strong>{value}</strong>
       <small>{sub}</small>
     </div>
@@ -603,7 +730,6 @@ function Overview({
     row = p.rows,
     profit = Number(row['NET PROFIT / LOSS'].aed);
   const trend = r.actual.map((p) => Number(p.rows['NET PROFIT / LOSS'].aed));
-  const max = Math.max(...trend.map(Math.abs), 1);
   const hospitals = Object.keys(row)
       .filter((l) => l.startsWith('Swizton • '))
       .map((l) => l.slice(10))
@@ -620,7 +746,7 @@ function Overview({
           </p>
         </div>
         <button className="outline" onClick={() => go('Profit & Loss')}>
-          View full statement ↗
+          View full statement <Icon name="arrowUp" size={14} />
         </button>
       </div>
       <div className="metrics">
@@ -646,7 +772,7 @@ function Overview({
           sub={`${fmt(p.kpis.achievement, 1)}% achievement · ${p.kpis.visits} visits`}
         />
       </div>
-      <div className="chart-grid">
+      <div className="chart-grid overview-charts">
         <section className="panel">
           <div className="panel-heading">
             <div>
@@ -657,23 +783,10 @@ function Overview({
               <i /> Net P/L
             </span>
           </div>
-          <div className="bar-chart">
-            {trend.map((v, i) => (
-              <div className={`bar-col ${i === mi ? 'focused' : ''}`} key={i}>
-                <span className="bar-value">{fmt(v / 1000, 1)}k</span>
-                <div className="bar-space">
-                  <div
-                    className={`bar ${v < 0 ? 'loss' : ''}`}
-                    style={{ height: `${Math.max((Math.abs(v) / max) * 100, 2)}%` }}
-                  />
-                </div>
-                <small>{months[i]}</small>
-              </div>
-            ))}
-          </div>
+          <ProfitTrend values={trend} selected={mi} months={months} />
           <div className="chart-note">
             Jan–Dec {r.year}{' '}
-            <span>Unentered months display zero; they are not confirmed results.</span>
+            <span>Periods without recorded activity are not confirmed results.</span>
           </div>
         </section>
         <section className="panel">
@@ -682,7 +795,9 @@ function Overview({
               <h3>Revenue composition</h3>
               <p>Hospital final / doctor-fee shares</p>
             </div>
-            <span>◉</span>
+            <span className="panel-icon">
+              <Icon name="hospital" />
+            </span>
           </div>
           <div className="revenue-total">
             <span>Total revenue</span>
@@ -739,7 +854,10 @@ function Overview({
             >
               <span>{l}</span>
               <b className={Number(row[l].aed) < 0 ? 'red' : ''}>
-                {fmt(row[l].aed, 2)} <small>AED ↗</small>
+                {fmt(row[l].aed, 2)}{' '}
+                <small>
+                  AED <Icon name="arrowUp" size={10} />
+                </small>
               </b>
             </button>
           ))}

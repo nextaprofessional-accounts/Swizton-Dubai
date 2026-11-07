@@ -15,9 +15,11 @@ const { randomUUID } = require('node:crypto');
     args: ['--no-sandbox'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('http://127.0.0.1:3001');
+  await page.screenshot({ path: '/tmp/swizton-login.png', fullPage: true });
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill('admin@demo.local');
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('demo-only');
   await page.getByRole('button', { name: 'Sign in →', exact: true }).click();
@@ -136,6 +138,26 @@ const { randomUUID } = require('node:crypto');
   await page.getByText('SOURCE TRANSACTIONS', { exact: true }).waitFor();
   await page.locator('.modal .close').click();
   await page.setViewportSize({ width: 390, height: 844 });
+  if (await page.locator('aside').isVisible()) throw Error('Mobile navigation should start closed');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page.keyboard.press('Escape');
+  if (await page.locator('aside').isVisible()) throw Error('Escape must close mobile navigation');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page.getByRole('navigation').getByRole('button', { name: 'Planning', exact: true }).click();
+  await page.getByRole('heading', { name: 'Forecasting & cash planning', exact: true }).waitFor();
+  if (await page.locator('aside').isVisible())
+    throw Error('Navigation must close after selecting a screen');
+  if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth))
+    throw Error('Mobile planning workspace has horizontal overflow');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Profit & Loss', exact: true })
+    .click();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth))
+    throw Error('Mobile P&L table must scroll within its container');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page.getByRole('navigation').getByRole('button', { name: 'Overview', exact: true }).click();
   await page.screenshot({ path: '/tmp/swizton-mobile.png', fullPage: true });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,
@@ -143,7 +165,7 @@ const { randomUUID } = require('node:crypto');
   if (overflow) throw Error('Mobile viewport has horizontal overflow');
   if (errors.length) throw Error(errors.join('\n'));
   console.log(
-    'PASS login, receipt creation, source drilldown, budget calculation, mobile layout; no browser errors',
+    'PASS login, receipt creation, source drilldown, budget calculation, mobile drawer/keyboard access, responsive planning and P&L; no browser errors',
   );
   await browser.close();
 })().catch((e) => {
