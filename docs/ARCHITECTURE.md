@@ -236,3 +236,5 @@ VAT and UAE Corporate Tax fields are available as bill disclosures. Tax applicab
 The v0.3 planning schema, API and wireframes are documented in [FORECASTING.md](FORECASTING.md). Planning data uses audited workflow records; frozen snapshots remain separate from the P&L ledger.
 
 The v0.4 [Finance validation workflow](FINANCE_VALIDATION.md) adds evidence-backed monthly FX approvals, exception review and monthly AED control-total sign-offs. This does not replace the remaining full-source migration and exact Excel-layout acceptance gates.
+
+The v0.5 [Daily operations](DAILY_OPERATIONS.md) phase adds four workflow record kinds for hospital mapping profiles, case metadata, bank statements and cash-match evidence. These extend operational controls without altering the P&L engine or assuming complete bank-balance reconciliation.

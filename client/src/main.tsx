@@ -1,3 +1,4 @@
+import { DailyOperations } from './DailyOperations';
 import { FinanceValidation } from './FinanceValidation';
 import { Planning } from './Planning';
 import React, { useEffect, useState, createContext, useContext } from 'react';
@@ -159,6 +160,7 @@ function App() {
   }
   const writable = user?.role !== 'Management';
   const independent = [
+    'Daily operations',
     'Finance validation',
     'Planning',
     'Operations',
@@ -377,17 +379,21 @@ function App() {
                 <span className="live-dot" />
                 {demo ? 'Sample environment' : 'Finance workspace'}
               </span>
-              <select
-                aria-label="Financial year"
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-              >
-                {[2026, 2025, 2024, 2023].map((y) => (
-                  <option key={y} value={y}>
-                    FY {y}
-                  </option>
-                ))}
-              </select>
+              {page === 'Daily operations' ? (
+                <span className="badge neutral">All periods</span>
+              ) : (
+                <select
+                  aria-label="Financial year"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                >
+                  {[2026, 2025, 2024, 2023].map((y) => (
+                    <option key={y} value={y}>
+                      FY {y}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </header>
           {demo && (
@@ -399,33 +405,39 @@ function App() {
               </span>
             </div>
           )}
-          <div className="toolbar">
-            <div className="period-control">
-              <Icon name="calendar" size={18} />
-              <select aria-label="Month" value={mi} onChange={(e) => setMi(Number(e.target.value))}>
-                {months.map((m, i) => (
-                  <option key={m} value={i}>
-                    {m} {year}
-                  </option>
-                ))}
-              </select>
-              <span className={`badge ${period?.locked ? 'closed' : ''}`}>
-                {period?.locked ? 'Locked' : 'Open period'}
-              </span>
-            </div>
-            <div className="segmented">
-              {(['Actual', 'Approx'] as const).map((v) => (
-                <button
-                  className={v === version ? 'selected' : ''}
-                  key={v}
-                  onClick={() => setVersion(v)}
+          {page !== 'Daily operations' && (
+            <div className="toolbar">
+              <div className="period-control">
+                <Icon name="calendar" size={18} />
+                <select
+                  aria-label="Month"
+                  value={mi}
+                  onChange={(e) => setMi(Number(e.target.value))}
                 >
-                  {v === 'Approx' ? 'Approx / forecast' : v}
-                </button>
-              ))}
+                  {months.map((m, i) => (
+                    <option key={m} value={i}>
+                      {m} {year}
+                    </option>
+                  ))}
+                </select>
+                <span className={`badge ${period?.locked ? 'closed' : ''}`}>
+                  {period?.locked ? 'Locked' : 'Open period'}
+                </span>
+              </div>
+              <div className="segmented">
+                {(['Actual', 'Approx'] as const).map((v) => (
+                  <button
+                    className={v === version ? 'selected' : ''}
+                    key={v}
+                    onClick={() => setVersion(v)}
+                  >
+                    {v === 'Approx' ? 'Approx / forecast' : v}
+                  </button>
+                ))}
+              </div>
+              <span className="muted">AED · INR in lakh</span>
             </div>
-            <span className="muted">AED · INR in lakh</span>
-          </div>
+          )}
           {error && (
             <div className="error" role="alert">
               {error}
@@ -444,6 +456,9 @@ function App() {
           )}
           {ds && page === 'Finance validation' && (
             <FinanceValidation ds={ds} revision={revision} year={year} user={user} refresh={load} />
+          )}
+          {ds && page === 'Daily operations' && (
+            <DailyOperations ds={ds} revision={revision} user={user} refresh={load} />
           )}
           {ds && page === 'Planning' && (
             <Planning ds={ds} revision={revision} user={user} refresh={load} />

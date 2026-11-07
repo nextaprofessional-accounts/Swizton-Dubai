@@ -33,6 +33,7 @@ const { randomUUID } = require('node:crypto');
     'Analytics',
     'Budget planner',
     'Planning',
+    'Daily operations',
     'Finance validation',
     'Operations',
     'Receivables',
@@ -73,6 +74,122 @@ const { randomUUID } = require('node:crypto');
     if (name === 'Budget planner') {
       await page.getByRole('button', { name: 'Calculate projection', exact: true }).click();
       await page.getByText('PROJECTED SWIZTON REVENUE', { exact: true }).waitFor();
+    }
+    if (name === 'Daily operations') {
+      await page.getByRole('button', { name: 'Open case', exact: true }).first().click();
+      await page
+        .getByLabel('Hospital case reference', { exact: true })
+        .fill(`BROWSER-CASE-${runId}`);
+      await page.getByLabel('Expected collection date', { exact: true }).fill('2026-12-01');
+      await page
+        .getByRole('textbox', { name: /^Case notes/ })
+        .fill('Synthetic source-linked case tracking');
+      await page
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Browser verifies case tracking without financial changes');
+      await page.getByRole('button', { name: 'Save case tracking', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Case tracking saved without changing the bill', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: 'Hospital imports', exact: true }).click();
+      await page.getByRole('button', { name: 'New hospital mapping', exact: true }).click();
+      await page.getByLabel('Mapping name', { exact: true }).fill(`Browser mapping ${runId}`);
+      await page
+        .locator('.master-form')
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Synthetic source header mapping verification');
+      await page.getByRole('button', { name: 'Save mapping version', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Hospital mapping version saved', { exact: true })
+        .waitFor();
+      const hospitalFile = `Browser-mapped-${runId}.csv`;
+      await page.getByLabel('Hospital bill file', { exact: true }).setInputFiles({
+        name: hospitalFile,
+        mimeType: 'text/csv',
+        buffer: Buffer.from(
+          `date,patient,procedure,doctor,invoice,gross,consumables,pharmacyLab\n2026-10-20,${patientReference},RFA,Dr. Tahsin,BROWSER-INV-${runId},10000,1000,1000`,
+        ),
+      });
+      await page
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Review synthetic mapped hospital bill import');
+      await page.getByRole('button', { name: 'Preview hospital import', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Mapped bill preview prepared; no ledger postings', { exact: true })
+        .waitFor();
+      const batch = page
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: hospitalFile, exact: true }) });
+      await batch
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Commit verified synthetic hospital bill');
+      await batch
+        .getByRole('button', { name: 'Commit validated hospital bills', exact: true })
+        .click();
+      await page
+        .getByRole('status')
+        .getByText('Mapped bills committed once', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: 'Bank matching', exact: true }).click();
+      await page.getByLabel('Bank account alias', { exact: true }).fill('BROWSER-TEST-AED');
+      await page.getByLabel('Bank statement file', { exact: true }).setInputFiles({
+        name: `Browser-bank-${runId}.csv`,
+        mimeType: 'text/csv',
+        buffer: Buffer.from(
+          `transactionId,date,direction,amount,reference\nBROWSER-BANK-${runId},2026-06-30,In,100,Synthetic browser bank evidence`,
+        ),
+      });
+      await page
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .first()
+        .fill('Preview synthetic bank statement evidence');
+      await page.getByRole('button', { name: 'Preview bank statement', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Bank statement preview created without cash postings', { exact: true })
+        .waitFor();
+      const statement = page
+        .locator('section')
+        .filter({ has: page.getByRole('combobox', { name: /Imported bank statement/ }) });
+      await statement
+        .getByRole('textbox', { name: 'Reason / approval note', exact: true })
+        .fill('Review synthetic bank source and allocate cash');
+      await statement.getByRole('button', { name: 'Commit bank statement', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Bank statement committed; no cash postings', { exact: true })
+        .waitFor();
+      await statement.getByRole('button', { name: 'Allocate bank row', exact: true }).click();
+      const choices = page.getByRole('combobox', { name: /Recorded cash event/ });
+      const cashId = await choices
+        .locator('option')
+        .filter({ hasText: patientReference })
+        .getAttribute('value');
+      await choices.selectOption(cashId);
+      await page.getByRole('button', { name: 'Match recorded cash', exact: true }).click();
+      await page
+        .getByRole('status')
+        .getByText('Bank evidence matched to recorded cash', { exact: true })
+        .waitFor();
+      await statement
+        .getByRole('button', { name: 'Unmatch with reason below', exact: true })
+        .click();
+      await page
+        .getByRole('status')
+        .getByText('Allocation reversed; cash posting preserved', { exact: true })
+        .waitFor();
+      await statement
+        .getByRole('button', { name: 'Void committed statement', exact: true })
+        .click();
+      await page
+        .getByRole('status')
+        .getByText('Statement voided; original evidence and cash preserved', { exact: true })
+        .waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: '/tmp/swizton-daily-operations.png', fullPage: true });
     }
     if (name === 'Finance validation') {
       const signInAs = async (role) => {
@@ -214,6 +331,18 @@ const { randomUUID } = require('node:crypto');
     .click();
   if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth))
     throw Error('Mobile P&L table must scroll within its container');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  await page
+    .getByRole('navigation')
+    .getByRole('button', { name: 'Daily operations', exact: true })
+    .click();
+  await page.getByRole('heading', { name: 'Daily operations workspace', exact: true }).waitFor();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth))
+    throw Error('Mobile case register has horizontal overflow');
+  await page.getByRole('button', { name: 'Bank matching', exact: true }).click();
+  await page.getByRole('heading', { name: 'Bank statement evidence · AED', exact: true }).waitFor();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth))
+    throw Error('Mobile bank matching has horizontal overflow');
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
   await page.getByRole('navigation').getByRole('button', { name: 'Overview', exact: true }).click();
   await page.screenshot({ path: '/tmp/swizton-mobile.png', fullPage: true });

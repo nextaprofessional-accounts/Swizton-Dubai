@@ -1,3 +1,4 @@
+import type { HospitalProfile, CaseRecord, BankStatement, BankMatch } from './daily-model.ts';
 import type { FxProposal, FinanceException, FinanceSignoff } from './finance-model.ts';
 import type { Lead, ForecastSnapshot, CashPlan, CashMovement } from './planning-model.ts';
 import type { Entry } from './model.ts';
@@ -20,7 +21,8 @@ export type ImportBatch = Base & {
   name: string;
   hash: string;
   status: 'Preview' | 'Committed' | 'Cancelled';
-  rows: { row: number; entry: Entry | null; errors: string[] }[];
+  rows: { row: number; entry: Entry | null; errors: string[]; warnings?: string[] }[];
+  mapping?: { profileId: string; version: number; hospital: string };
   reason: string;
   committedAt?: string;
 };
@@ -91,6 +93,10 @@ export type DoctorPayment = Base & {
   reason: string;
 };
 export type WorkflowItem =
+  | HospitalProfile
+  | CaseRecord
+  | BankStatement
+  | BankMatch
   | FxProposal
   | FinanceException
   | FinanceSignoff

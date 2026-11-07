@@ -41,7 +41,7 @@ CREATE TRIGGER audit_append_only BEFORE UPDATE OR DELETE ON audit_event FOR EACH
 
 CREATE TABLE IF NOT EXISTS workflow_item (
  id uuid PRIMARY KEY, organisation_id integer NOT NULL REFERENCES organisation(id),
- kind text NOT NULL CHECK(kind IN ('adjustment_request','import_batch','settlement','budget','workbook_review','doctor_payment','lead','forecast_snapshot','cash_plan','cash_movement','fx_proposal','finance_exception','finance_signoff')),
+ kind text NOT NULL CHECK(kind IN ('adjustment_request','import_batch','settlement','budget','workbook_review','doctor_payment','lead','forecast_snapshot','cash_plan','cash_movement','fx_proposal','finance_exception','finance_signoff','hospital_profile','case_record','bank_statement','bank_match')),
  payload jsonb NOT NULL, created_by uuid NOT NULL REFERENCES app_user(id),
  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
  CHECK(payload->>'id'=id::text), CHECK(payload->>'kind'=kind)
@@ -51,6 +51,6 @@ CREATE INDEX IF NOT EXISTS workflow_item_kind ON workflow_item(organisation_id,k
 CREATE UNIQUE INDEX IF NOT EXISTS app_user_email_casefold ON app_user(lower(email));
 
 ALTER TABLE workflow_item DROP CONSTRAINT IF EXISTS workflow_item_kind_check;
-ALTER TABLE workflow_item ADD CONSTRAINT workflow_item_kind_check CHECK(kind IN ('adjustment_request','import_batch','settlement','budget','workbook_review','doctor_payment','lead','forecast_snapshot','cash_plan','cash_movement','fx_proposal','finance_exception','finance_signoff'));
+ALTER TABLE workflow_item ADD CONSTRAINT workflow_item_kind_check CHECK(kind IN ('adjustment_request','import_batch','settlement','budget','workbook_review','doctor_payment','lead','forecast_snapshot','cash_plan','cash_movement','fx_proposal','finance_exception','finance_signoff','hospital_profile','case_record','bank_statement','bank_match'));
 
 ALTER TABLE app_user ADD COLUMN IF NOT EXISTS token_version integer NOT NULL DEFAULT 0;

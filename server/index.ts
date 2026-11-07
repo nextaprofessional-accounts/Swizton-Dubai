@@ -1,3 +1,4 @@
+import { registerDailyRoutes } from './daily-routes.ts';
 import { canonical } from './finance.ts';
 import { registerFinanceRoutes } from './finance-routes.ts';
 import { registerPlanningRoutes } from './planning-routes.ts';
@@ -125,6 +126,7 @@ const revisionSchema = z.number().int().nonnegative();
 registerAdvancedRoutes(app);
 registerPlanningRoutes(app);
 registerFinanceRoutes(app);
+registerDailyRoutes(app);
 app.get('/api/accounts', roles('Admin'), async (_q, r) => r.json(await listAccounts()));
 app.post('/api/accounts', roles('Admin'), async (q, r) => {
   const b = z

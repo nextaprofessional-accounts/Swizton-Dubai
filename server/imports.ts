@@ -1,3 +1,5 @@
+import { Decimal as D } from 'decimal.js';
+import { canonicalReference } from './references.ts';
 import ExcelJS from 'exceljs';
 import { parse } from 'csv-parse/sync';
 import { randomUUID } from 'node:crypto';
@@ -43,11 +45,21 @@ export function validateXlsxArchive(b: Buffer) {
   }
   if (!hasWorkbook) throw Error('Workbook metadata missing');
 }
+function validateHeaders(headers: unknown[]): string[] {
+  const names = Array.from(headers, (h) => String(h ?? '').trim());
+  if (
+    !names.length ||
+    names.some((h) => !h || ['__proto__', 'constructor', 'prototype'].includes(h)) ||
+    new Set(names).size !== names.length
+  )
+    throw Error('Headers must be nonempty, unique and safe');
+  return names;
+}
 export async function parseBillRows(format: 'csv' | 'xlsx', content: string) {
   if (Buffer.byteLength(content) > 7_000_000) throw Error('File content exceeds limit');
   if (format === 'csv') {
     const rows = parse(content, {
-      columns: true,
+      columns: validateHeaders,
       skip_empty_lines: true,
       bom: true,
       max_record_size: 100000,
@@ -63,7 +75,9 @@ export async function parseBillRows(format: 'csv' | 'xlsx', content: string) {
   const sheet = w.worksheets[0];
   if (!sheet || sheet.rowCount < 2 || sheet.rowCount > 1001)
     throw Error('Provide 1–1000 rows on the first worksheet');
-  const headers = sheet.getRow(1).values as string[],
+  const originalHeaders = sheet.getRow(1).values as string[];
+  validateHeaders(originalHeaders.slice(1));
+  const headers = originalHeaders.map((h) => (typeof h === 'string' ? h.trim() : h)),
     rows: Record<string, unknown>[] = [];
   sheet.eachRow((row, n) => {
     if (n === 1) return;
@@ -99,11 +113,31 @@ export function previewBills(rows: Record<string, unknown>[], ds: Dataset): Impo
         vat: String(row.vat ?? '0'),
         tax: String(row.tax ?? '0'),
       });
+      if (entry.kind !== 'bill') throw Error('Bill import required');
       assertUnlocked(draft, entry);
       const next = { ...draft, entries: [...draft.entries, entry] };
       validateDataset(next);
       draft.entries.push(entry);
-      return { row: index + 2, entry, errors: [] };
+      const repeats = draft.entries.filter(
+        (e) =>
+          e.kind === 'bill' &&
+          e.id !== entry.id &&
+          e.hospital === entry.hospital &&
+          e.date === entry.date &&
+          canonicalReference(e.patient) === canonicalReference(entry.patient) &&
+          e.procedure === entry.procedure &&
+          new D(e.gross).eq(entry.gross),
+      );
+      return {
+        row: index + 2,
+        entry,
+        errors: [],
+        warnings: repeats.length
+          ? [
+              'Possible same-day repeat patient/procedure/amount under another invoice; verify source before committing',
+            ]
+          : [],
+      };
     } catch (e) {
       return {
         row: index + 2,

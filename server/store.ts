@@ -52,6 +52,12 @@ export async function read(): Promise<{ data: Dataset; revision: number }> {
   }
 }
 function changeSet(before: Dataset, after: Dataset, entity: string, action: string) {
+  const operationFor = (d: Dataset) =>
+    d.operations?.find((o) =>
+      action === 'daily.case.update'
+        ? o.kind === 'case_record' && o.billId === entity
+        : o.id === entity,
+    ) ?? null;
   const newEntries = after.entries.filter((e) => !before.entries.some((b) => b.id === e.id));
   if (action === 'masters.replace')
     return { before: { masters: before.masters }, after: { masters: after.masters } };
@@ -62,12 +68,12 @@ function changeSet(before: Dataset, after: Dataset, entity: string, action: stri
     };
   return {
     before: {
-      operation: before.operations?.find((o) => o.id === entity) ?? null,
+      operation: operationFor(before),
       entries: [],
       ...(action === 'finance.fx.review' ? { fx: before.masters.fx } : {}),
     },
     after: {
-      operation: after.operations?.find((o) => o.id === entity) ?? null,
+      operation: operationFor(after),
       entries: newEntries,
       ...(action === 'finance.fx.review' ? { fx: after.masters.fx } : {}),
       relatedOperations: (after.operations ?? []).filter(

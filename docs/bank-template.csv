@@ -1,0 +1,2 @@
+transactionId,date,direction,amount,reference
+SYNTHETIC-BANK-001,2026-06-30,In,100.00,Synthetic receipt reference

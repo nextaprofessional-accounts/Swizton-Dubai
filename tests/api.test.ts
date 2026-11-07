@@ -944,3 +944,222 @@ test('workbook exception APIs preserve original evidence, prevent self review an
     original,
   );
 });
+
+test('mapped hospital imports preserve profile evidence, catch normalized duplicates and post once', async () => {
+  let s = await state();
+  const profile = {
+    name: 'Synthetic API hospital mapping',
+    hospital: 'CSH',
+    dateFormat: 'DD/MM/YYYY',
+    numberFormat: 'Comma thousands',
+    columns: {
+      date: 'Date',
+      patient: 'Patient',
+      procedure: 'Procedure',
+      doctor: 'Doctor',
+      invoice: 'Invoice',
+      gross: 'Gross',
+      consumables: 'Materials',
+      pharmacyLab: 'Lab',
+    },
+    defaults: {
+      billType: 'IP',
+      payment: 'Insurance',
+      regime: 'Standard',
+      visits: '1',
+      vat: '0',
+      tax: '0',
+    },
+    aliases: {},
+    reason: 'Verify auditable hospital column mapping',
+  };
+  assert.equal(
+    (await request('/daily/profiles', management, { profile, revision: s.revision })).status,
+    403,
+  );
+  const created = await request('/daily/profiles', finance, { profile, revision: s.revision });
+  assert.equal(created.status, 201, await created.clone().text());
+  const profileId = (await created.json()).id;
+  s = await state();
+  const count = s.data.entries.length,
+    content =
+      'Date,Patient,Procedure,Doctor,Invoice,Gross,Materials,Lab\n20/10/2026,Synthetic mapped API,RFA,Dr. Tahsin,API-MAPPED-V5,10000,1000,1000';
+  const preview = await request('/daily/imports/preview', finance, {
+    profileId,
+    name: 'Synthetic mapped API.csv',
+    format: 'csv',
+    content,
+    reason: 'Validate mapped bill source before posting',
+    revision: s.revision,
+  });
+  assert.equal(preview.status, 201, await preview.clone().text());
+  const id = (await preview.json()).id;
+  s = await state();
+  assert.equal(s.data.entries.length, count);
+  const batch = s.data.operations.find((o: any) => o.id === id);
+  assert.equal(batch.mapping.profileId, profileId);
+  assert.deepEqual(batch.rows[0].errors, []);
+  const commit = await request(`/imports/${id}/commit`, finance, {
+    reason: 'Review and commit mapped hospital bill',
+    revision: s.revision,
+  });
+  assert.equal(commit.status, 200, await commit.clone().text());
+  s = await state();
+  assert.equal(s.data.entries.length, count + 1);
+  assert.equal(
+    (
+      await request(`/imports/${id}/commit`, finance, {
+        reason: 'Verify repeat commit blocked',
+        revision: s.revision,
+      })
+    ).status,
+    400,
+  );
+  const duplicate = await request('/daily/imports/preview', finance, {
+    profileId,
+    name: 'Case variant duplicate.csv',
+    format: 'csv',
+    content: content.replace('API-MAPPED-V5', ' api-mapped-v5 '),
+    reason: 'Verify normalized duplicate invoice protection',
+    revision: s.revision,
+  });
+  assert.equal(duplicate.status, 201);
+  const duplicateId = (await duplicate.json()).id;
+  s = await state();
+  assert.match(
+    s.data.operations.find((o: any) => o.id === duplicateId)?.rows?.[0]?.errors?.join(' ') ?? '',
+    /Duplicate/,
+  );
+});
+
+test('case tracking updates are audited and cannot alter source bills or be written by Management', async () => {
+  let s = await state();
+  const bill = s.data.entries.find((e: any) => e.kind === 'bill' && e.invoice === 'API-MAPPED-V5'),
+    before = structuredClone(bill);
+  assert.ok(bill);
+  const body = {
+    status: 'Collection follow-up',
+    hospitalCaseReference: 'API-CASE-V5',
+    authorizationReference: 'SYNTHETIC-AUTH',
+    expectedCollectionDate: '2026-11-20',
+    notes: 'Initial synthetic case note',
+    reason: 'Track source-linked bill follow-up',
+    revision: s.revision,
+  };
+  assert.equal((await request(`/daily/cases/${bill.id}`, management, body, 'PUT')).status, 403);
+  const first = await request(`/daily/cases/${bill.id}`, finance, body, 'PUT');
+  assert.equal(first.status, 200, await first.clone().text());
+  s = await state();
+  const record = s.data.operations.find(
+    (o: any) => o.kind === 'case_record' && o.billId === bill.id,
+  );
+  assert.ok(record);
+  const updated = await request(
+    `/daily/cases/${bill.id}`,
+    finance,
+    {
+      ...body,
+      notes: 'Updated synthetic case note',
+      expectedUpdatedAt: record.updatedAt,
+      revision: s.revision,
+    },
+    'PUT',
+  );
+  assert.equal(updated.status, 200, await updated.clone().text());
+  s = await state();
+  assert.deepEqual(
+    s.data.entries.find((e: any) => e.id === bill.id),
+    before,
+  );
+  assert.equal(
+    (await request(`/daily/cases/${bill.id}`, finance, { ...body, revision: s.revision }, 'PUT'))
+      .status,
+    409,
+  );
+  const cases = await (await request('/daily/cases?asOf=2026-11-30', management)).json();
+  assert.ok(cases.rows.some((r: any) => r.id === bill.id && r.overdue));
+  const audit = await (await request('/audit', admin)).json();
+  const change = audit.find(
+    (a: any) => a.action === 'daily.case.update' && a.before_data.operation,
+  );
+  assert.equal(change.before_data.operation.notes, 'Initial synthetic case note');
+  assert.equal(change.after_data.operation.notes, 'Updated synthetic case note');
+});
+
+test('bank imports and cash allocations are atomic, reversible and do not duplicate P&L postings', async () => {
+  let s = await state();
+  const count = s.data.entries.length,
+    receipt = s.data.entries.find((e: any) => e.kind === 'receipt' && Number(e.amount) >= 100);
+  assert.ok(receipt);
+  const body = {
+    account: 'Synthetic API AED',
+    name: 'Synthetic bank v5.csv',
+    format: 'csv',
+    content:
+      'transactionId,date,direction,amount,reference\nAPI-BANK-V5,2026-12-10,In,100,Synthetic bank matching',
+    reason: 'Verify statement-to-cash source evidence',
+    revision: s.revision,
+  };
+  assert.equal((await request('/daily/bank/preview', management, body)).status, 403);
+  const created = await request('/daily/bank/preview', finance, body);
+  assert.equal(created.status, 201, await created.clone().text());
+  const id = (await created.json()).id;
+  s = await state();
+  const committed = await request(`/daily/bank/${id}/commit`, finance, {
+    reason: 'Commit validated synthetic statement',
+    revision: s.revision,
+  });
+  assert.equal(committed.status, 200, await committed.clone().text());
+  const register = await (await request('/daily/bank', management)).json(),
+    statement = register.statements.find((s: any) => s.id === id),
+    row = statement.rows[0].data;
+  s = await state();
+  const matched = await request('/daily/bank/matches', finance, {
+    statementId: id,
+    rowId: row.id,
+    eventId: receipt.id,
+    amount: '100',
+    reason: 'Verify cash allocation against statement',
+    revision: s.revision,
+  });
+  assert.equal(matched.status, 201, await matched.clone().text());
+  const matchId = (await matched.json()).id;
+  s = await state();
+  assert.equal(s.data.entries.length, count);
+  assert.equal(
+    (
+      await request('/daily/bank/matches', finance, {
+        statementId: id,
+        rowId: row.id,
+        eventId: receipt.id,
+        amount: '1',
+        reason: 'Attempt duplicate cash allocation',
+        revision: s.revision,
+      })
+    ).status,
+    400,
+  );
+  const reversed = await request(`/daily/bank/matches/${matchId}/reverse`, finance, {
+    reason: 'Correct evidence link without reversing cash',
+    revision: s.revision,
+  });
+  assert.equal(reversed.status, 200, await reversed.clone().text());
+  s = await state();
+  assert.equal(s.data.entries.length, count);
+  assert.equal(s.data.operations.find((o: any) => o.id === matchId).status, 'Reversed');
+  assert.equal(
+    (
+      await request(`/daily/bank/${id}/void`, finance, {
+        reason: 'Attempt Finance statement void',
+        revision: s.revision,
+      })
+    ).status,
+    403,
+  );
+  const voided = await request(`/daily/bank/${id}/void`, admin, {
+    reason: 'Review and void corrected bank evidence',
+    revision: s.revision,
+  });
+  assert.equal(voided.status, 200, await voided.clone().text());
+  assert.equal((await request('/daily/bank/export', management)).status, 200);
+});

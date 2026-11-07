@@ -158,3 +158,7 @@ The next phase adds a procedure pipeline, rolling forecasts, immutable version s
 ## Finance validation phase (v0.4)
 
 [Finance validation](FINANCE_VALIDATION.md) adds monthly FX averages and independent approvals, source exception dispositions, monthly AED control comparisons, financial-state sign-offs and a review evidence export. New month closes require a currently approved monthly rate; direct FX changes in Masters are replaced by the approval workflow. Source figures are preserved, and actual RBI-rate approval/reconciliation remain human Finance responsibilities.
+
+## Daily operations phase (v0.5)
+
+[Daily operations](DAILY_OPERATIONS.md) adds source-linked bill cases, versioned hospital mappings, stronger invoice duplicate checks, bank statement previews and auditable many-to-many cash allocations. Only an explicit hospital bill import commit posts financial entries. Case tracking, bank imports and bank matching do not duplicate revenue or expenses.

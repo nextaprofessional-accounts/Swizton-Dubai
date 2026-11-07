@@ -284,11 +284,132 @@ try {
       completed.data.operations.some((o: any) => o.kind === kind),
       kind,
     );
+  const profile = await write(
+    '/daily/profiles',
+    {
+      profile: {
+        name: 'Synthetic packaged hospital mapping',
+        hospital: 'CSH',
+        dateFormat: 'ISO',
+        numberFormat: 'Plain',
+        columns: {
+          date: 'date',
+          patient: 'patient',
+          procedure: 'procedure',
+          doctor: 'doctor',
+          invoice: 'invoice',
+          gross: 'gross',
+          consumables: 'consumables',
+          pharmacyLab: 'pharmacyLab',
+        },
+        defaults: {
+          billType: 'IP',
+          payment: 'Insurance',
+          regime: 'Standard',
+          visits: '1',
+          vat: '0',
+          tax: '0',
+        },
+        aliases: {},
+        reason: 'Verify persistent hospital mapping',
+      },
+    },
+    financeToken,
+  );
+  const billPreview = await write(
+    '/daily/imports/preview',
+    {
+      profileId: profile.id,
+      name: 'Packaged mapped bill.csv',
+      format: 'csv',
+      content:
+        'date,patient,procedure,doctor,invoice,gross,consumables,pharmacyLab\n2026-10-20,Synthetic packaged case,RFA,Dr. Tahsin,PACKAGED-V5,10000,1000,1000',
+      reason: 'Validate mapped bill in compiled server',
+    },
+    financeToken,
+  );
+  async function action(path: string, body: object, actor = financeToken) {
+    const state = await (await request('/data')).json();
+    const response = await request(path, { ...body, revision: state.revision }, actor);
+    assert.equal(response.status, 200, await response.clone().text());
+    return response;
+  }
+  await action(`/imports/${billPreview.id}/commit`, {
+    reason: 'Commit validated mapped hospital bill',
+  });
+  let daily = await (await request('/data')).json();
+  const bill = daily.data.entries.find(
+    (e: any) => e.kind === 'bill' && e.invoice === 'PACKAGED-V5',
+  );
+  assert.ok(bill);
+  const caseResponse = await fetch(origin + `/api/daily/cases/${bill.id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${financeToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      status: 'Collection follow-up',
+      hospitalCaseReference: 'PACKAGED-CASE-V5',
+      authorizationReference: '',
+      notes: 'Synthetic follow-up',
+      reason: 'Verify case tracking persistence',
+      revision: daily.revision,
+    }),
+  });
+  assert.equal(caseResponse.status, 200, await caseResponse.clone().text());
+  const bank = await write(
+    '/daily/bank/preview',
+    {
+      account: 'PACKAGED-AED',
+      name: 'Packaged bank.csv',
+      format: 'csv',
+      content:
+        'transactionId,date,direction,amount,reference\nPACKAGED-BANK-V5,2026-06-02,In,100,PACKAGED-CAPITAL',
+      reason: 'Verify bank statement persistence',
+    },
+    financeToken,
+  );
+  await action(`/daily/bank/${bank.id}/commit`, { reason: 'Commit synthetic bank evidence' });
+  const bankData = await (await request('/daily/bank')).json(),
+    bankStatement = bankData.statements.find((s: any) => s.id === bank.id),
+    cash = bankData.cash.find((e: any) => e.reference === 'PACKAGED-CAPITAL');
+  assert.ok(cash);
+  const allocated = await write(
+    '/daily/bank/matches',
+    {
+      statementId: bank.id,
+      rowId: bankStatement.rows[0].data.id,
+      eventId: cash.id,
+      amount: '100',
+      reason: 'Match recorded capital without reposting',
+    },
+    financeToken,
+  );
+  await action(`/daily/bank/matches/${allocated.id}/reverse`, {
+    reason: 'Verify reversible evidence link',
+  });
+  await action(
+    `/daily/bank/${bank.id}/void`,
+    { reason: 'Admin reviews synthetic bank statement correction' },
+    token,
+  );
+  daily = await (await request('/data')).json();
+  assert.equal(daily.data.entries.length, 1, 'Only explicit bill commit creates a P&L entry');
+  for (const kind of ['hospital_profile', 'case_record', 'bank_statement', 'bank_match'])
+    assert.ok(
+      daily.data.operations.some((o: any) => o.kind === kind),
+      kind,
+    );
+  assert.equal((await request('/daily/bank/export')).status, 200);
+  const afterBill = await (await request(`/finance/workbooks/${controlsId}/2026/readiness`)).json();
+  assert.equal(
+    afterBill.signoffs.at(-1).current,
+    false,
+    'Posting a new bill invalidates the old control sign-off',
+  );
   const page = await fetch(origin);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /type="module"/);
   console.log(
-    'PASS compiled server, PostgreSQL, private workbook baseline, persistent planning, independent FX/exception approvals, current sign-off, review exports and unchanged ledger',
+    'PASS compiled PostgreSQL app: financial approvals, mapping/commit, case tracking, bank matching/unmatching, evidence exports and sign-off invalidation',
   );
 } finally {
   if (child && child.exitCode === null) {

@@ -1514,3 +1514,10 @@ footer {
   border-color: #edd0c9;
   color: #9c5145;
 }
+
+input,
+select,
+textarea {
+  max-width: 100%;
+  min-width: 0;
+}

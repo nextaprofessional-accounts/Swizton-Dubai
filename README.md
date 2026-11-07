@@ -2,13 +2,17 @@
 
 P&L and revenue-share management for **NINETY EIGHT FAHRENHEIT MEDICAL SERVICES FZCO**. React + TypeScript, Node/Express, PostgreSQL 16 and Decimal.js.
 
-**Advanced finance operations and forecasting application (v0.4.0) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
+**Advanced finance operations and forecasting application (v0.5.0) with clearly labelled sample data. The supplied workbook has been privately inspected. Exact FY 2026 reconciliation remains pending resolution of source exceptions, historical balances and approved share/FX rules.** Do not treat demo amounts as company accounts.
 
 ## Professional workspace design
 
 The v0.3.1 interface introduces grouped navy navigation, consistent SVG icons, emerald financial cards, a signed profit/loss chart, clearer forms and financial tables, and a responsive mobile drawer with keyboard controls. The shared design covers reporting, planning, operations and administration. Existing calculations, approval rules and role permissions remain unchanged.
 
-The current v0.4 release adds [Finance validation](docs/FINANCE_VALIDATION.md): monthly average FX preparation, independent approvals, exception review, AED reconciliation and sign-off evidence. PostgreSQL users must run `npm run db:migrate` before starting this version. Legacy rates are retained but require approval before new month closes.
+The v0.4 release added [Finance validation](docs/FINANCE_VALIDATION.md): monthly average FX preparation, independent approvals, exception review, AED reconciliation and sign-off evidence. PostgreSQL users must run `npm run db:migrate` before starting this version. Legacy rates are retained but require approval before new month closes.
+
+## Daily operations (v0.5)
+
+[Daily operations](docs/DAILY_OPERATIONS.md) adds source-linked IP/OP case tracking, immutable hospital import mappings, normalized invoice duplicate checks, and bank-statement matching with partial allocations and reversal history. Matching does not post cash or P&L entries. PostgreSQL upgrades require `npm run db:migrate` before starting this version.
 
 ## Quick start: sample workspace
 
@@ -74,6 +78,7 @@ Stop the running server, extract the latest ZIP into a separate folder, and pres
 
 ## Deliverables
 
+- [Case register, mapped hospital imports and bank-statement matching](docs/DAILY_OPERATIONS.md)
 - [Monthly FX approval, source exceptions and reconciliation sign-off](docs/FINANCE_VALIDATION.md)
 - [Rolling forecasts, lead pipeline, accuracy and cash planning](docs/FORECASTING.md)
 - [Advanced workflows, additional APIs, schema extension and deployment guide](docs/ADVANCED_APP.md)
@@ -90,6 +95,6 @@ FY totals are **Actual only**. A separate working outlook uses Approx until a mo
 
 Workbook inspection confirmed the forecast chain (gross approval → net procedure charge → doctor payout → Swizton share). Recorded bill deductions now support reasoned overrides. Deduction bases, refundable treatment, recognition timing, source errors, FX approvals and exact automated print layout remain to be settled. XLSX has Jan–Dec Approx/Actual blocks with three currencies/ratio columns; PDF currently uses readable monthly pages. Guided masters, classified breakeven, case-linked costs, hospital collections, professional-fee payments, adjustment approvals, saved budget snapshots and workbook review are implemented. Statutory VAT/Corporate Tax calculation, bank execution/reversals, SSO/MFA and production hosting/backup operations remain outside this release. See the architecture document for the complete acceptance boundary.
 
-## Schema and private data (v0.4)
+## Schema and private data (v0.5)
 
 Run the schema migration before starting the new server. It enables persistent workflow items for imports, approvals, collections, doctor payments, budgets, workbook reviews, leads, forecast snapshots, cash plans, confirmed cash movements, FX proposals, exception reviews and financial sign-offs. Master changes no longer require reopening every month: only changes affecting locked results are rejected. Manual adjustments now go through independent Admin approval; use Operations to review them. Set `PRIVATE_DATA_DIR` outside the checkout before using real workbook review in PostgreSQL mode. Source workbooks and private reconciliation artifacts must never be pushed to the public repository.

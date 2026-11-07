@@ -193,6 +193,9 @@ export function Operations({ ds, revision, user, month, refresh }: Props) {
                           <td>{row.entry && 'hospital' in row.entry ? row.entry.hospital : '—'}</td>
                           <td className={row.errors.length ? 'red' : ''}>
                             {row.errors.length ? row.errors.join('; ') : 'Ready'}
+                            {row.warnings?.length ? (
+                              <small className="block">{row.warnings.join('; ')}</small>
+                            ) : null}
                           </td>
                         </tr>
                       ))}

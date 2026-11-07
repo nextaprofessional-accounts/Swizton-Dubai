@@ -1,3 +1,4 @@
+import { invoiceKey } from './references.ts';
 import { recognitionMonthOf } from './period.ts';
 import { affectedMonths, billShare, calculateYear, ruleAt, validateMasters } from './engine.ts';
 import { entrySchema, masterSchema, type Dataset, type Entry } from './model.ts';
@@ -14,7 +15,7 @@ export function validateDataset(d: Dataset) {
     ids.add(e.id);
     if (e.kind === 'bill') {
       if (e.version !== 'Actual') throw Error('Bills must be Actual');
-      const key = `${e.hospital}:${e.invoice}`;
+      const key = invoiceKey(e.hospital, e.invoice);
       if (invoices.has(key)) throw Error(`Duplicate hospital invoice ${e.invoice}`);
       invoices.add(key);
       if (!d.masters.procedures.includes(e.procedure) || !d.masters.doctors.includes(e.doctor))
